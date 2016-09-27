@@ -7,9 +7,9 @@ namespace Pathfinding {
 
         #region Enums
         public enum NODE_TYPE {
-            WALKABLE,
-            HARD_TO_WALK,
-            NONWALKABLE
+            WALKABLE = 1,
+            HARD_TO_WALK = 2,
+            NONWALKABLE = 100
         }
         #endregion
 
@@ -35,7 +35,7 @@ namespace Pathfinding {
 
         #region Properties
 
-        readonly public NODE_TYPE NodeType;
+        public NODE_TYPE NodeType = NODE_TYPE.WALKABLE;
 
         public bool Available;
 
@@ -58,7 +58,7 @@ namespace Pathfinding {
             get { return g_Walkable; }
         }
         public float Weight {
-            get { return g_Weight; }
+            get { return (float) g_NodeType; }
             set { g_Weight = value;  }
         }
         public bool Selected;

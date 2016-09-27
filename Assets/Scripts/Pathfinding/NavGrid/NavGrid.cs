@@ -44,11 +44,12 @@ namespace Pathfinding {
         public bool         DisplayTileText = false;
         public float        GridTransparency = 1.0f;
         private float       g_NodeRadius = 0.5f;
+        public int          RandomHeavyAreas = 0;
         public float        BlockingHeight = 2.0f;
         NavNode[,]          g_Grid;
-        public float        NormalWeight = 1;
-        public float        MediumWeight = 50;
-        public float        NotAvailableWeight = 100;
+        public float        NormalWeight = (float) NavNode.NODE_TYPE.WALKABLE;
+        public float        MediumWeight = (float)NavNode.NODE_TYPE.HARD_TO_WALK;
+        public float        NotAvailableWeight = (float)NavNode.NODE_TYPE.NONWALKABLE;
         private bool        g_TileSelected = false;
         private NavNode     g_SelectedTile;
         public float        SelectedTileWeight = 1;
@@ -81,7 +82,36 @@ namespace Pathfinding {
                     g_Grid[row, col] = node;
                 }
             }
+            RandomizeHardWalkingAreas(RandomHeavyAreas, 31);
+        }
 
+        private void RandomizeHardWalkingAreas(int areas, int spread) {
+
+            Dictionary<int, int> a = new Dictionary<int, int>();
+
+            int limitX = g_Grid.GetLength(0), 
+                limitY = g_Grid.GetLength(1);
+
+            Vector2[] randomAreas = new Vector2[areas];
+
+            for(int i = 0; i < areas; ++i) {
+
+                Vector2 pos = new Vector2(
+                    Mathf.RoundToInt(Random.Range(0, limitX)),
+                    Mathf.RoundToInt(Random.Range(0, limitY)));
+
+                int rows = (int) pos.x, cols = (int) pos.y;
+
+                //for(int r = (rows - spread/2); rows < spread; ++rows) {
+                //    for (int c = (cols - spread / 2); rows < spread; ++rows) {
+                //        if(IsValid(pos)) {
+                //            g_Grid[r, c].NodeType = NavNode.NODE_TYPE.HARD_TO_WALK;
+                //            g_Grid[r, c].Weight = (float) NavNode.NODE_TYPE.HARD_TO_WALK;
+                //        }
+                //    }
+                //}
+
+            }
         }
 
         #endregion Private_Functions
