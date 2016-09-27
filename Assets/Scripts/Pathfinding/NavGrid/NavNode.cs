@@ -9,7 +9,7 @@ namespace Pathfinding {
         public enum NODE_TYPE {
             WALKABLE = 1,
             HARD_TO_WALK = 2,
-            NONWALKABLE = 100
+            NONWALKABLE = 3
         }
         #endregion
 
@@ -35,7 +35,10 @@ namespace Pathfinding {
 
         #region Properties
 
-        public NODE_TYPE NodeType = NODE_TYPE.WALKABLE;
+        public NODE_TYPE NodeType {
+            get { return g_NodeType; }
+            set { g_NodeType = value; }
+        }
 
         public bool Available;
 
@@ -126,9 +129,7 @@ destroy_tile:
 
 
         public bool IsWalkable() {
-
-            if (g_NodeType == NODE_TYPE.NONWALKABLE) return false;
-
+            
             if (g_Up != null) {
                 Ray ray = new Ray(g_Position, g_Up);
                 RaycastHit hit;

@@ -47,8 +47,8 @@ namespace Pathfinding {
         public int          RandomHeavyAreas = 0;
         public float        BlockingHeight = 2.0f;
         NavNode[,]          g_Grid;
-        public float        NormalWeight = (float) NavNode.NODE_TYPE.WALKABLE;
-        public float        MediumWeight = (float)NavNode.NODE_TYPE.HARD_TO_WALK;
+        public float        NormalWeight = (float)      NavNode.NODE_TYPE.WALKABLE;
+        public float        MediumWeight = (float)      NavNode.NODE_TYPE.HARD_TO_WALK;
         public float        NotAvailableWeight = (float)NavNode.NODE_TYPE.NONWALKABLE;
         private bool        g_TileSelected = false;
         private NavNode     g_SelectedTile;
@@ -89,8 +89,8 @@ namespace Pathfinding {
 
             Dictionary<int, int> a = new Dictionary<int, int>();
 
-            int limitX = g_Grid.GetLength(0), 
-                limitY = g_Grid.GetLength(1);
+            int limitX = g_Grid.GetLength(0) - 1, 
+                limitY = g_Grid.GetLength(1) - 1;
 
             Vector2[] randomAreas = new Vector2[areas];
 
@@ -100,17 +100,16 @@ namespace Pathfinding {
                     Mathf.RoundToInt(Random.Range(0, limitX)),
                     Mathf.RoundToInt(Random.Range(0, limitY)));
 
-                int rows = (int) pos.x, cols = (int) pos.y;
+                int xOff = (int)(pos.x - (spread / 2)),
+                    yOff = (int)(pos.y - (spread / 2));
 
-                //for(int r = (rows - spread/2); rows < spread; ++rows) {
-                //    for (int c = (cols - spread / 2); rows < spread; ++rows) {
-                //        if(IsValid(pos)) {
-                //            g_Grid[r, c].NodeType = NavNode.NODE_TYPE.HARD_TO_WALK;
-                //            g_Grid[r, c].Weight = (float) NavNode.NODE_TYPE.HARD_TO_WALK;
-                //        }
-                //    }
-                //}
-
+                for (int r = 0; r < spread; ++r) {
+                    for (int c = 0; c < spread; ++c) {
+                        if (IsValid(new Vector2(xOff + r, yOff + c))) {
+                            g_Grid[xOff + r, yOff + c].NodeType = NavNode.NODE_TYPE.HARD_TO_WALK;
+                        }
+                    }
+                }
             }
         }
 
@@ -239,9 +238,8 @@ namespace Pathfinding {
         public bool IsValid(Vector2 coord) {
             return 
                 !(coord.x < 0 || coord.y < 0) &&
-                (coord.x < GridDimensions.x) && 
-                (coord.y < GridDimensions.y) && 
-                (g_Grid[(int) coord.x, (int) coord.y].IsWalkable());
+                (coord.x < g_Grid.GetLength(0)) && 
+                (coord.y < g_Grid.GetLength(1));
         }
         public NavNode GetNeighborNode(NavNode current, GRID_DIRECTION dir) {
             return null;
