@@ -44,9 +44,11 @@ namespace Pathfinding {
         public bool         DisplayTileText = false;
         public float        GridTransparency = 1.0f;
         private float       g_NodeRadius = 0.5f;
-        public int          RandomHeavyAreas = 0;
+        public int          RandomHeavyAreas = 8;       // Default value
+        public int          RandomHighways = 4;         // Default value
         public float        BlockingHeight = 2.0f;
         NavNode[,]          g_Grid;
+        public float        EasyWeight = (float)        NavNode.NODE_TYPE.HIGHWAY;
         public float        NormalWeight = (float)      NavNode.NODE_TYPE.WALKABLE;
         public float        MediumWeight = (float)      NavNode.NODE_TYPE.HARD_TO_WALK;
         public float        NotAvailableWeight = (float)NavNode.NODE_TYPE.NONWALKABLE;
@@ -83,6 +85,7 @@ namespace Pathfinding {
                 }
             }
             RandomizeHardWalkingAreas(RandomHeavyAreas, 31);
+            RandomizeHighways(RandomHighways);
         }
 
         private void RandomizeHardWalkingAreas(int areas, int spread) {
@@ -106,10 +109,134 @@ namespace Pathfinding {
                 for (int r = 0; r < spread; ++r) {
                     for (int c = 0; c < spread; ++c) {
                         if (IsValid(new Vector2(xOff + r, yOff + c))) {
-                            g_Grid[xOff + r, yOff + c].NodeType = NavNode.NODE_TYPE.HARD_TO_WALK;
+                            g_Grid[xOff + r, yOff + c].Weight = (float) NavNode.NODE_TYPE.HARD_TO_WALK;
+
                         }
                     }
                 }
+            }
+        }
+
+        private void RandomizeHighways(int randomHighways) {
+
+            int totalRes = 0;
+
+        restart_highways:
+
+            Dictionary<NavNode,bool> totalChange = new Dictionary<NavNode, bool>();
+            bool done = false;
+            int restarts = -1;
+            
+            while (!done) {
+
+                // for each path
+                for (int i = 0; i < RandomHighways; ++i) {
+
+                start_highway:
+                    restarts++;
+                    if(restarts > 400) {
+                        Debug.Log("Restarting all highways");
+                        totalRes++;
+                        if (totalRes > 20) return;
+                        goto restart_highways;
+                    }
+                    // get base
+                    int xBase = 0,
+                        yBase = 0;
+
+                    bool onX = false;
+                    if(Random.Range(0f,1f) <= 0.5f) {
+                        xBase = (int) Random.Range(0, g_Grid.GetLength(0) - 1);
+                        yBase = 0;
+                        onX = true;
+                    } else {
+                        xBase = 0;
+                        yBase = (int) Random.Range(0 , g_Grid.GetLength(1) - 1);
+                    }
+
+                    Dictionary<NavNode,bool> toChange = new Dictionary<NavNode, bool>();
+                    int count = 0;
+
+                    // is it a valid start?
+                    if (IsValid(new Vector2(xBase, yBase))
+                        // first node is not a highway
+                        && !g_Grid[xBase, yBase].IsType(NavNode.NODE_TYPE.HIGHWAY)) {
+
+                        NavNode n = g_Grid[xBase, yBase];
+
+                        // 20 forth by default
+                        for (int f = 0; f < 20; ++f) {
+                            if (IsValid(new Vector2(xBase, yBase))
+                                && !g_Grid[xBase, yBase].IsType(NavNode.NODE_TYPE.HIGHWAY)) {
+                                if(!onX)
+                                    toChange.Add(g_Grid[xBase++, yBase], true);
+                                else
+                                    toChange.Add(g_Grid[xBase, yBase++], true);
+                                ++count;
+                            } else goto start_highway;
+                        }
+
+                        bool randomWalk = true;
+
+                        bool xWalk = !onX, yWalk = onX;
+
+                        while (randomWalk) {
+                            
+                            if (xWalk)
+                                yBase += 1;
+                            else
+                                xBase += yWalk ? 1 : -1;
+
+                            bool error = false;
+
+                            if (IsValid(new Vector2(xBase, yBase))) {
+                                if (!totalChange.ContainsKey(g_Grid[xBase, yBase])) {
+                                    toChange.Add(g_Grid[xBase, yBase], true);
+                                    ++count;
+                                } else {
+                                    Debug.Log("Collision on random walk");
+                                    error = true;
+                                }
+                            } else {
+                                if (count < 100) {
+                                    error = true;
+                                } else {
+                                    randomWalk = false;
+                                }
+                            }
+
+                            if(error) {
+                                goto start_highway;
+                            }
+
+                            if (count % 20 == 0) {
+                                float turn = Random.Range(0f, 1f);
+                                if (turn >= 0.6f) {
+                                    if (xBase == 0)
+                                        xWalk = true;
+                                    else if (yBase == 0)
+                                        yWalk = true;
+                                    else {
+                                        xWalk = !xWalk;
+                                        yWalk = !yWalk;
+                                    }
+                                }
+                            }
+                        }
+
+                        foreach (NavNode node in toChange.Keys) {
+                            if (totalChange.ContainsKey(node)) {
+                                Debug.Log("Path collides, re-start path");
+                                goto start_highway;
+                            } else totalChange.Add(node, true);
+                        }
+
+                    } else --i; // repeat
+                }
+                done = true;
+            }
+            foreach(NavNode n in totalChange.Keys) {
+                n.Weight -= n.Weight + (float) NavNode.NODE_TYPE.HIGHWAY;
             }
         }
 
