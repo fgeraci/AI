@@ -30,9 +30,11 @@ namespace Pathfinding {
         #endregion
 
         #region Members
+        [SerializeField]
         private Dictionary<IPathfinder, NavNode> g_WalkedOnNodes;
         public bool         WriteGridToFile = false;
         public string       FileName = "Grid_Description.txt";
+        public bool         LoadFromFile;
         public bool         RedrawGrid;
         public bool         CreateRivers;
         public LayerMask    UnwalkableMask;
@@ -47,6 +49,7 @@ namespace Pathfinding {
         public int          RandomHeavyAreas = 8;       // Default value
         public int          RandomHighways = 4;         // Default value
         public float        BlockingHeight = 2.0f;
+        [SerializeField]
         NavNode[,]          g_Grid;
         public float        EasyWeight = (float)        NavNode.NODE_TYPE.HIGHWAY;
         public float        NormalWeight = (float)      NavNode.NODE_TYPE.WALKABLE;
@@ -61,31 +64,35 @@ namespace Pathfinding {
         #region Private_Functions
 
         private void PopulateGrid() {
-            g_WalkedOnNodes = new Dictionary<IPathfinder, NavNode>();
-            g_GridScale = 1f / (float) GridScale;
-            float nodeDiameter = g_NodeRadius * 2 * g_GridScale;
-            GridDimensions.x = Mathf.RoundToInt(transform.localScale.x / nodeDiameter);
-            GridDimensions.y = Mathf.RoundToInt(transform.localScale.z / nodeDiameter);
-            int tilesX = (int) GridDimensions.x,
-                tilesY = (int) GridDimensions.y;
-            g_Grid = new NavNode[tilesX, tilesY];
-            Vector3 gridWorldBottom = (transform.position - (transform.right * GridDimensions.x / 2) -
-                (transform.forward * GridDimensions.y / 2) + new Vector3(g_NodeRadius,0.0f,g_NodeRadius)) * g_GridScale;
-            for(int row = 0; row < tilesX; ++row) {
-                for (int col = 0; col < tilesY; ++col) {
-                    NavNode node = new NavNode(
-                        gridWorldBottom + (transform.right * (nodeDiameter) * row) + transform.forward * (nodeDiameter) * col,
-                        new Vector2(row,col),
-                        transform.up,
-                        BlockingHeight,
-                        true,
-                        g_NodeRadius * g_GridScale,
-                        this);
-                    g_Grid[row, col] = node;
+            if(LoadFromFile) {
+
+            } else {
+                g_WalkedOnNodes = new Dictionary<IPathfinder, NavNode>();
+                g_GridScale = 1f / (float) GridScale;
+                float nodeDiameter = g_NodeRadius * 2 * g_GridScale;
+                GridDimensions.x = Mathf.RoundToInt(transform.localScale.x / nodeDiameter);
+                GridDimensions.y = Mathf.RoundToInt(transform.localScale.z / nodeDiameter);
+                int tilesX = (int) GridDimensions.x,
+                    tilesY = (int) GridDimensions.y;
+                g_Grid = new NavNode[tilesX, tilesY];
+                Vector3 gridWorldBottom = (transform.position - (transform.right * GridDimensions.x / 2) -
+                    (transform.forward * GridDimensions.y / 2) + new Vector3(g_NodeRadius,0.0f,g_NodeRadius)) * g_GridScale;
+                for(int row = 0; row < tilesX; ++row) {
+                    for (int col = 0; col < tilesY; ++col) {
+                        NavNode node = new NavNode(
+                            gridWorldBottom + (transform.right * (nodeDiameter) * row) + transform.forward * (nodeDiameter) * col,
+                            new Vector2(row,col),
+                            transform.up,
+                            BlockingHeight,
+                            true,
+                            g_NodeRadius * g_GridScale,
+                            this);
+                        g_Grid[row, col] = node;
+                    }
                 }
+                RandomizeHardWalkingAreas(RandomHeavyAreas, 31);
+                RandomizeHighways(RandomHighways);
             }
-            RandomizeHardWalkingAreas(RandomHeavyAreas, 31);
-            RandomizeHighways(RandomHighways);
         }
 
         private void RandomizeHardWalkingAreas(int areas, int spread) {
@@ -110,7 +117,7 @@ namespace Pathfinding {
                     for (int c = 0; c < spread; ++c) {
                         if (IsValid(new Vector2(xOff + r, yOff + c))) {
                             g_Grid[xOff + r, yOff + c].Weight = (float) NavNode.NODE_TYPE.HARD_TO_WALK;
-
+                            g_Grid[xOff + r, yOff + c].NodeStatus = NavNode.NODE_STATUS.HARD_TO_WALK;
                         }
                     }
                 }
@@ -121,7 +128,7 @@ namespace Pathfinding {
 
             int totalRes = 0;
 
-        restart_highways:
+restart_highways:
 
             Dictionary<NavNode,bool> totalChange = new Dictionary<NavNode, bool>();
             bool done = false;
@@ -231,11 +238,19 @@ namespace Pathfinding {
                             } else totalChange.Add(node, true);
                         }
 
+                        foreach (NavNode node in toChange.Keys) {
+                            node.HighwayId = i;
+                        }
+
                     } else --i; // repeat
                 }
                 done = true;
             }
             foreach(NavNode n in totalChange.Keys) {
+                if (n.NodeStatus == NavNode.NODE_STATUS.HARD_TO_WALK)
+                    n.NodeStatus = NavNode.NODE_STATUS.HARD_HIGHWAY;
+                else
+                    n.NodeStatus = NavNode.NODE_STATUS.REGULAR_HIGHWAY;
                 n.Weight -= n.Weight + (float) NavNode.NODE_TYPE.HIGHWAY;
             }
         }
@@ -250,18 +265,31 @@ namespace Pathfinding {
         }
         
         void Awake() {
-            PopulateGrid();
+            if(g_Grid == null)
+                PopulateGrid();
+            // current node occupied by an agent
             g_WalkedOnNodes = new Dictionary<IPathfinder, NavNode>();
             if(WriteGridToFile) {
                 if(File.Exists(FileName)) {
                     FileName = FileName.Substring(0, FileName.IndexOf(".txt")) + "_copy.txt";
-                    Debug.Log("File " + FileName + " already exists - creating copy: " + FileName);
                     // TODO - create file here
                 }
                 StreamWriter sw = File.CreateText(FileName);
-                sw.WriteLine("Grid Specs");
-                sw.WriteLine("-----------\n\n");
+                sw.WriteLine(g_Grid.GetLength(0)+","+g_Grid.GetLength(1));
+                for(int r = 0; r < (int)GridDimensions.x; ++r) {
+                    for (int c = 0; c < (int)GridDimensions.y; ++c) {
+                        string s = (g_Grid[r, c].NodeStatus == NavNode.NODE_STATUS.HARD_HIGHWAY || g_Grid[r, c].NodeStatus == NavNode.NODE_STATUS.REGULAR_HIGHWAY) ?
+                            ((char)g_Grid[r, c].NodeStatus).ToString() + g_Grid[r,c].HighwayId : ((int) g_Grid[r, c].NodeStatus).ToString();
+                        s += ((c + 1) == (int)GridDimensions.y ? "\n" : ",");
+                        sw.Write(s);
+                    }
+                }
                 sw.Close();
+            }
+            if(PaintPathdOnPlay) {
+                foreach(NavNode n in g_Grid) {
+                    n.SetHighlightTile();
+                }
             }
         }
 
@@ -317,7 +345,7 @@ namespace Pathfinding {
                 foreach(NavNode node in g_Grid) {
                     if(!Application.isPlaying)
                         node.IsWalkable();
-                    Color c;
+                    Color c = Color.white;
                     if(node.Selected) {
                         c = Color.white;
                         c.a = 1.0f * GridTransparency;
@@ -331,10 +359,13 @@ namespace Pathfinding {
                         } else if (node.Weight >= NormalWeight) {
                             c = Color.green;
                             c.a = 0.1f * GridTransparency;
-                        } else {
-                            c = Color.blue;
-                            c.a = 0.8f * GridTransparency;
                         }
+                    }
+
+                    if(node.NodeStatus == NavNode.NODE_STATUS.REGULAR_HIGHWAY ||
+                        node.NodeStatus == NavNode.NODE_STATUS.HARD_HIGHWAY) {
+                        c = Color.blue;
+                        c.a = 0.8f * GridTransparency;
                     }
 
                     Gizmos.color = c;

@@ -13,7 +13,11 @@ namespace Pathfinding {
 
         bool IsReachable(Vector3 from, Vector3 to);
 
-        float ComputeNodeCost(NavNode n, GRID_DIRECTION dir);
+        float ComputeNodeCost(NavNode from, NavNode to, GRID_DIRECTION dir);
+
+        float ComputeNodeHeuristic(NavNode n);
+
+        List<Vector3> ConstructPath(NavNode goal, Dictionary<NavNode, NavNode> parents);
 
         void ClearPath();
 	

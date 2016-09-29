@@ -10,7 +10,15 @@ namespace Pathfinding {
             HIGHWAY = 0,
             WALKABLE = 1,
             HARD_TO_WALK = 2,
-            NONWALKABLE = 3
+            NONWALKABLE = 100
+        }
+
+        public enum NODE_STATUS {
+            BLOCKED = 0,
+            REGULAR = 1,
+            HARD_TO_WALK = 2,
+            REGULAR_HIGHWAY = 'a',
+            HARD_HIGHWAY = 'b'
         }
         #endregion
 
@@ -21,6 +29,7 @@ namespace Pathfinding {
             g_Walkable = walkable;
             g_NodeType = walkable ? NODE_TYPE.WALKABLE  // hard to walk is also walkable at this point
                 : NODE_TYPE.NONWALKABLE;
+            g_NodeStatus = IsWalkable() ? NODE_STATUS.REGULAR : NODE_STATUS.BLOCKED;
             g_GridPosition = gridPos;
             g_Grid = grid;
         }
@@ -36,6 +45,8 @@ namespace Pathfinding {
 
         #region Properties
 
+        public int HighwayId;
+        
         public NODE_TYPE NodeType {
             get { 
                 if (IsType(NODE_TYPE.HIGHWAY))       return NODE_TYPE.HIGHWAY;
@@ -70,10 +81,21 @@ namespace Pathfinding {
             set { g_Weight = value;  }
         }
         public bool Selected;
+
+        public NODE_STATUS NodeStatus {
+            get {
+                return g_NodeStatus;
+            }
+            set {
+                g_NodeStatus = value;
+            }
+        }
+
         #endregion
 
         #region Members
         private NODE_TYPE   g_NodeType;
+        private NODE_STATUS g_NodeStatus; // might deprecte g_NodeType
         private GameObject  g_Tile;
         private GameObject  g_TileText;
         private NavGrid     g_Grid;
@@ -87,6 +109,28 @@ namespace Pathfinding {
         #endregion
 
         #region Public_Functions
+
+        public void SetHighlightTile() {
+            Color c = Color.white;
+            switch(NodeStatus) {
+                case NODE_STATUS.BLOCKED:
+                    c = Color.red;
+                    break;
+                case NODE_STATUS.REGULAR:
+                    c = Color.green;
+                    break;
+                case NODE_STATUS.HARD_TO_WALK:
+                    c = Color.yellow;
+                    break;
+                case NODE_STATUS.REGULAR_HIGHWAY:
+                    c = Color.blue;
+                    break;
+                case NODE_STATUS.HARD_HIGHWAY:
+                    c = Color.gray;
+                    break;
+            }
+            SetHighlightTile(true, c, 0.4f);
+        }
 
         public void SetHighlightTile(bool h, Color c, float alpha) {
             if(h) {
@@ -123,22 +167,19 @@ destroy_tile:
         }
 
         public override string ToString() {
-            return "NavNode @ ["+g_Position+"]";
+            return "NavNode @ ["+GridPosition.x+","+GridPosition.y+"] @ "+g_Position+"]";
         }
 
         public void SetActiveTileText(bool active) {
             if (g_TileText != null)
                 g_TileText.SetActive(active);
         }
-
-
-
+        
         public bool IsWalkable() {
             
             if (g_Up != null) {
                 Ray ray = new Ray(g_Position, g_Up);
                 RaycastHit hit;
-                // nothing is on top of the node nor colliding by its radius
                 Available =  !(Physics.Raycast(Position, Up, out hit, g_BlockingHeight) ||
                           Physics.Raycast(Position + new Vector3(Radius,0,0), Up, g_BlockingHeight) ||
                           Physics.Raycast(Position + new Vector3(-Radius, 0, 0), Up, g_BlockingHeight) ||
@@ -183,6 +224,5 @@ destroy_tile:
             tm.text = "Weight: " + Weight;
         }
         #endregion
-
     }
 }
