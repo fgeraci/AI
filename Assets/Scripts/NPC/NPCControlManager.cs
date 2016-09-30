@@ -98,12 +98,12 @@ namespace NPC {
                     g_NPCCamera.UpdateCameraMode(NPCCamController.CAMERA_MODE.ISOMETRIC);
                 }
             }
-            if (EnableIOController) {
-                g_IO.UpdateIO();
-            }
         }
         
         void Update () {
+            if (EnableIOController) {
+                g_IO.UpdateIO();
+            }
             if (EnableCameraController) {
                 g_NPCCamera.UpdateCamera();
             }

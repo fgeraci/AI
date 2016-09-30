@@ -197,11 +197,11 @@ destroy_tile:
 
         public bool IsType(NavNode.NODE_TYPE t) {
             if (t == NODE_TYPE.HIGHWAY)
-                return Weight > (float) NODE_TYPE.HIGHWAY && Weight < (float) NODE_TYPE.WALKABLE;
+                return Weight >= (float) NODE_TYPE.HIGHWAY && Weight < (float) NODE_TYPE.WALKABLE;
             if (t == NODE_TYPE.WALKABLE)
-                return Weight > (float)NODE_TYPE.WALKABLE && Weight < (float)NODE_TYPE.HARD_TO_WALK;
+                return Weight >= (float)NODE_TYPE.WALKABLE && Weight < (float)NODE_TYPE.HARD_TO_WALK;
             if (t == NODE_TYPE.HARD_TO_WALK)
-                return Weight > (float)NODE_TYPE.HARD_TO_WALK && Weight < (float)NODE_TYPE.NONWALKABLE;
+                return Weight >= (float)NODE_TYPE.HARD_TO_WALK && Weight < (float)NODE_TYPE.NONWALKABLE;
             else
                 return Weight > (float)NODE_TYPE.HARD_TO_WALK;
         }

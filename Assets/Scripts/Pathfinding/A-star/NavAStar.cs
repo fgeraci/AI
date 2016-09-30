@@ -32,9 +32,9 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
 
     private NPCController g_NPCController;
     private Vector3 g_TargetLocation;
-    private Dictionary<NavNode, bool> g_VisitedList;
-
+    private HashSet<NavNode> g_VisitedList;
     private SortedList<float,NavNode> g_Fringe;
+    private NavGrid g_Grid;
     #endregion
 
     #region Public_Functions
@@ -43,17 +43,56 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
     public float ComputeNodeCost(NavNode from, NavNode to, GRID_DIRECTION dir) {
         float totalCost = 0f;
         if (GRID_DIRECTION.CURRENT != dir) {
-            float modFactor = 1f;
+            NavNode.NODE_STATUS fromStatus = from.NodeStatus;
             switch(dir) {
-                case GRID_DIRECTION.NORTH_EAST:
-                case GRID_DIRECTION.NORTH_WEST:
-                case GRID_DIRECTION.SOUTH_EAST:
-                case GRID_DIRECTION.SOUTH_WEST:
-                    modFactor += DiagonalPenalty;
-                    break;
+            // diagonals
+            case GRID_DIRECTION.NORTH_EAST:
+            case GRID_DIRECTION.NORTH_WEST:
+            case GRID_DIRECTION.SOUTH_EAST:
+            case GRID_DIRECTION.SOUTH_WEST:
+                if (from.NodeType == NavNode.NODE_TYPE.WALKABLE) {
+                    totalCost = to.NodeType == NavNode.NODE_TYPE.HARD_TO_WALK ? 
+                        (Mathf.Sqrt(2f) + Mathf.Sqrt(8f)) / 2f :
+                        Mathf.Sqrt(2);
+                } else if (from.NodeType == NavNode.NODE_TYPE.HARD_TO_WALK) {
+                    totalCost = to.NodeType == NavNode.NODE_TYPE.HARD_TO_WALK ? 
+                        Mathf.Sqrt(8) : 
+                        Mathf.Sqrt(2);
+                }
+                if (from.NodeStatus == NavNode.NODE_STATUS.HARD_HIGHWAY) {
+                    if (from.NodeStatus == NavNode.NODE_STATUS.HARD_HIGHWAY) {
+
+                    }
+                }
+                break;
+            // straights
+            default:
+                    // Highways
+                    if (from.NodeStatus == NavNode.NODE_STATUS.HARD_HIGHWAY || 
+                            to.NodeStatus == NavNode.NODE_STATUS.HARD_HIGHWAY) {
+                        totalCost = from.NodeType == NavNode.NODE_TYPE.WALKABLE ?
+                            (to.NodeType == NavNode.NODE_TYPE.WALKABLE ? 0.25f : 0.375f) :
+                            (to.NodeType == NavNode.NODE_TYPE.WALKABLE ? 0.25f : 0.5f);
+                    } 
+                    // Regular
+                    else {
+                        if (from.NodeType == NavNode.NODE_TYPE.WALKABLE) {
+                            totalCost = to.NodeType == NavNode.NODE_TYPE.HARD_TO_WALK ?
+                                (float)to.NodeType - 0.5f :
+                                (float)to.NodeType;
+                        } else if (from.NodeType == NavNode.NODE_TYPE.HARD_TO_WALK) {
+                            totalCost = (float)to.NodeType - 0.5f;
+                        }
+                    }
+                break;
             }
-            totalCost = to.Weight * modFactor;
+            if (from.NodeStatus == NavNode.NODE_STATUS.HARD_HIGHWAY) {
+                if(from.NodeStatus == NavNode.NODE_STATUS.HARD_HIGHWAY) {
+
+                }
+            }
         }
+        Debug.Log("Cost calculated: " + totalCost);
         return totalCost;
     }
 
@@ -69,14 +108,21 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
 
     public List<Vector3> ConstructPath(NavNode goal, Dictionary<NavNode,NavNode> parents) {
         List<Vector3> path = new List<Vector3>(parents.Count + 1);
+        List<NavNode> pathToPrint = new List<NavNode>(parents.Count + 1);
+        g_VisitedList = new HashSet<NavNode>();
         path.Insert(0, goal.Position);
+        pathToPrint.Insert(0, goal);
         bool done = false;
         NavNode curr = goal;
         while (!done) {
-            if (curr == parents[curr]) done = true; 
+            g_VisitedList.Add(curr);
+            if (curr == parents[curr]) done = true;
+            curr.SetHighlightTile(true, curr == goal ? Color.green : Color.yellow, 0.8f);
             curr = parents[curr];
             path.Insert(0, curr.Position);
+            pathToPrint.Insert(0, curr);
         }
+        if(g_Grid != null) g_Grid.WritePathToFile(pathToPrint);
         return path;
     }
 
@@ -85,9 +131,13 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
         RaycastHit hit;
         List<Vector3> pathList = new List<Vector3>();
         if (Physics.Raycast(new Ray(transform.position + (transform.up * 0.2f), -1 * transform.up), out hit)) {
-            
-            NavGrid grid = hit.collider.GetComponent<NavGrid>();
-            NavNode fromNode = grid.GetOccupiedNode(this);
+            g_Grid = hit.collider.GetComponent<NavGrid>();
+            NavNode fromNode = g_Grid.GetOccupiedNode(this);
+            if(fromNode == null) {
+                Debug.Log("NavAStar --> Agent is currently navigating in between nodes, try again please");
+                return pathList;
+            }
+                
             NavNode goalNode = null;
             g_TargetLocation = to;
             Dictionary<NavNode, float> gVal = new Dictionary<NavNode, float>();
@@ -120,7 +170,7 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
                 }
 
                 // loop adjacent
-                Dictionary<NavNode, GRID_DIRECTION> neighbors = grid.GetNeighborNodes(n);
+                Dictionary<NavNode, GRID_DIRECTION> neighbors = g_Grid.GetNeighborNodes(n);
                 foreach(NavNode neighbor in neighbors.Keys) {
                     if(!closedList.Contains(neighbor) && neighbor.IsWalkable()) {
                         float val = gVal[n] + ComputeNodeCost(n, neighbor, neighbors[neighbor]);
@@ -144,7 +194,7 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
     }
 
     public void ClearPath() {
-        foreach(NavNode n in g_VisitedList.Keys) {
+        foreach(NavNode n in g_VisitedList) {
             n.SetHighlightTile(false, Color.black, 0f);
         }
     }
@@ -187,7 +237,7 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
     void Start() {
         g_NPCController = GetComponent<NPCController>();
         g_Fringe = new SortedList<float, NavNode>(new DuplicateKeyComparer<float>());
-        g_VisitedList = new Dictionary<NavNode, bool>();
+        g_VisitedList = new HashSet<NavNode>();
     }
 
     void Update() {

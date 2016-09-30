@@ -37,6 +37,7 @@ namespace Pathfinding {
         public bool         LoadFromFile;
         public bool         RedrawGrid;
         public bool         CreateRivers;
+        public float        MinimunBlocked = 0;
         public LayerMask    UnwalkableMask;
         public Vector2      GridDimensions;
         public GRID_SCALE   GridScale = GRID_SCALE.ONE;
@@ -67,6 +68,7 @@ namespace Pathfinding {
             if(LoadFromFile) {
 
             } else {
+                int blocked = 0;
                 g_WalkedOnNodes = new Dictionary<IPathfinder, NavNode>();
                 g_GridScale = 1f / (float) GridScale;
                 float nodeDiameter = g_NodeRadius * 2 * g_GridScale;
@@ -87,12 +89,20 @@ namespace Pathfinding {
                             true,
                             g_NodeRadius * g_GridScale,
                             this);
+                        if (!node.Available) blocked++;
                         g_Grid[row, col] = node;
                     }
+                }
+                if(blocked < MinimunBlocked * (tilesX * tilesY)) {
+                    RandomizeBlockers();
                 }
                 RandomizeHardWalkingAreas(RandomHeavyAreas, 31);
                 RandomizeHighways(RandomHighways);
             }
+        }
+
+        private void RandomizeBlockers() {
+
         }
 
         private void RandomizeHardWalkingAreas(int areas, int spread) {
@@ -379,6 +389,23 @@ restart_highways:
 
         #region Public_Functions
         
+        public void WritePathToFile(List<NavNode> nodes) {
+            if(WriteGridToFile) {
+                if(File.Exists(FileName)) {
+                    StreamWriter sw = File.AppendText(FileName + "_pathRecord.txt");
+                    NavNode g = nodes[nodes.Count - 1];
+                    sw.WriteLine((int) g.GridPosition.x + "," + (int) g.GridPosition.y);
+                    for (int i = 0; i < nodes.Count - 1; ++i) {
+                        sw.WriteLine("(" + (int) nodes[i].GridPosition.x + "," + nodes[i].GridPosition.y + ")");
+                    }
+                    sw.Close();
+                    Debug.Log("NavGrid --> Path recorded!");
+                } else {
+                    Debug.Log("NavGrid --> No file created for the grid: " + FileName);
+                }
+            }
+        }
+
         public void SetIPathfinderNode(IPathfinder ipf, NavNode node) {
             if(g_WalkedOnNodes.ContainsKey(ipf) && g_WalkedOnNodes[ipf] != node) {
                 if(Application.isPlaying) g_WalkedOnNodes[ipf].SetHighlightTile(false, Color.grey, 0.5f);
@@ -390,7 +417,7 @@ restart_highways:
         }
 
         public NavNode GetOccupiedNode(IPathfinder ipf) {
-            return g_WalkedOnNodes[ipf];
+            return g_WalkedOnNodes.ContainsKey(ipf) ? g_WalkedOnNodes[ipf] : null;
         }
 
         public bool IsValid(Vector2 coord) {
