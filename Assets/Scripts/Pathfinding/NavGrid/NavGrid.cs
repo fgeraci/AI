@@ -37,7 +37,8 @@ namespace Pathfinding {
         public bool         LoadFromFile;
         public bool         RedrawGrid;
         public bool         CreateRivers;
-        public float        MinimunBlocked = 0;
+        public bool         AddBlockerOnScene;
+        public float        MinimunBlocked;
         public LayerMask    UnwalkableMask;
         public Vector2      GridDimensions;
         public GRID_SCALE   GridScale = GRID_SCALE.ONE;
@@ -93,16 +94,34 @@ namespace Pathfinding {
                         g_Grid[row, col] = node;
                     }
                 }
-                if(blocked < MinimunBlocked * (tilesX * tilesY)) {
-                    RandomizeBlockers();
+                int targetBlocked = (int)(MinimunBlocked * (tilesX * tilesY));
+                if (AddBlockerOnScene && blocked < targetBlocked) {
+                    RandomizeBlockers(targetBlocked - blocked);
+                    AddBlockerOnScene = false;
                 }
                 RandomizeHardWalkingAreas(RandomHeavyAreas, 31);
                 RandomizeHighways(RandomHighways);
             }
         }
 
-        private void RandomizeBlockers() {
-
+        private void RandomizeBlockers(int blockers) {
+            bool done = false;
+            int success = 0;
+            Transform obstacles = GameObject.Find("Obstacles").transform;
+            while (!done) {
+                int x = (int)Random.Range(0, g_Grid.GetLength(0));
+                int y = (int)Random.Range(0, g_Grid.GetLength(1));
+                if (!g_Grid[x, y].Available) continue;
+                NavNode n = g_Grid[x, y];
+                GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                cube.transform.localScale = new Vector3(n.Radius * 1.5f, n.Radius * 2, n.Radius * 1.5f);
+                cube.transform.position = n.Position + (new Vector3(0f,n.Radius,0f));
+                cube.AddComponent<Rigidbody>();
+                cube.GetComponent<BoxCollider>().size = new Vector3(0.8f, 0.8f, 0.8f);
+                cube.transform.parent = obstacles;
+                success++;
+                if (success >= blockers) done = true;
+            }
         }
 
         private void RandomizeHardWalkingAreas(int areas, int spread) {
