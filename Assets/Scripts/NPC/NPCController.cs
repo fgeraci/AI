@@ -110,10 +110,13 @@ namespace NPC {
 
         public void GoTo(Vector3 t) {
             List<Vector3> path = gAI.FindPath(t);
-            if (path.Count <= 1) {
+            if (path.Count < 1) {
                 Debug("NPCController --> No path found to target location");
-            } else
+            } else {
+                if (path.Count == 1)
+                    Debug("NPCController --> No pathfinder enabled, defaulting to steering");
                 gBody.GoTo(path);
+            }
         }
 
         public bool AddNPCModule(INPCModule mod) {

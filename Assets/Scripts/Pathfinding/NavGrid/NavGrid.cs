@@ -36,7 +36,6 @@ namespace Pathfinding {
         public string       FileName = "Grid_Description.txt";
         public bool         LoadFromFile;
         public bool         RedrawGrid;
-        public bool         CreateRivers;
         public bool         AddBlockerOnScene;
         public float        MinimunBlocked;
         public LayerMask    UnwalkableMask;
@@ -107,7 +106,14 @@ namespace Pathfinding {
         private void RandomizeBlockers(int blockers) {
             bool done = false;
             int success = 0;
-            Transform obstacles = GameObject.Find("Obstacles").transform;
+            GameObject obstaclesGO = GameObject.Find("Obstacles");
+            Transform obstacles = null;
+            if(obstaclesGO != null) {
+                GameObject.DestroyImmediate(obstaclesGO);
+            }
+            obstaclesGO = new GameObject();
+            obstaclesGO.name = "Obstacles";
+            obstacles = obstaclesGO.transform;
             while (!done) {
                 int x = (int)Random.Range(0, g_Grid.GetLength(0));
                 int y = (int)Random.Range(0, g_Grid.GetLength(1));

@@ -175,8 +175,7 @@ namespace NPC {
             g_Animator = gameObject.GetComponent<Animator>();
             gIKController = gameObject.GetComponent<NPCIKController>();
             gNavMeshAgent = gameObject.GetComponent<NavMeshAgent>();
-            if (Navigation == NAV_STATE.NAVMESH_NAV) gNavMeshAgent.enabled = true;
-            if (g_Animator == null || gNavMeshAgent == null || gNavMeshAgent.enabled) UseAnimatorController = false;
+            if (g_Animator == null || gNavMeshAgent == null) UseAnimatorController = false;
             if (gIKController == null) IKEnabled = false;
             g_NavQueue = new List<Vector3>();
         }
@@ -321,14 +320,16 @@ namespace NPC {
         private void UpdateNavigation() {
             if (Navigation != NAV_STATE.DISABLED) {
                 if (Navigation == NAV_STATE.STEERING_NAV) {
-                    if(g_NavQueue.Count > 0) {
+                    if (g_NavQueue.Count > 0) {
+                        g_NPCController.Debug("NPCBody --> Handling steering with queue: " + g_NavQueue.Count);
                         HandleSteering();
                     } g_Navigating = false;
                 } else {
+                    g_TargetLocation = g_NavQueue[0];
+                    g_NavQueue.Clear();
                     HandleNavAgent();
                 }
             } else {
-                g_TargetLocation = Vector3.zero;
                 g_Navigating = false;
             }
         }
@@ -337,7 +338,8 @@ namespace NPC {
             if (gNavMeshAgent != null) {
                 if (!gNavMeshAgent.enabled)
                     gNavMeshAgent.enabled = true;
-                gNavMeshAgent.SetDestination(g_TargetLocation);
+                if(g_NavQueue.Count > 0)
+                    gNavMeshAgent.SetDestination(g_TargetLocation);
             }
         }
 

@@ -23,6 +23,7 @@ namespace NPC {
         private const string label_AIPathfind = "Pathfinder";
         private const string label_NPCLoadedMods = "Loaded NPC Modules";
         private const string label_DebugPrint = "Debug Prints";
+        private const string label_NavMeshAgentPathfinding = "Use NavMeshAgent";
 
         [SerializeField]
         int selectedPathfinder;
@@ -94,15 +95,23 @@ namespace NPC {
                     if (gController.AI.Pathfinders.ContainsKey(pfds[selectedPathfinder])) {
                         selectedPathfinder = EditorGUILayout.Popup("Pathfinders", selectedPathfinder, pfds);
                         gController.AI.SelectedPathfinder = pfds[selectedPathfinder];
-                    } else gController.AI.SelectedPathfinder = pfds[0];
+                    } else {
+                        gController.AI.SelectedPathfinder = pfds[0];
+                    }
+                    if (gController.Body.Navigation == NAV_STATE.STEERING_NAV) {
+                        gController.AI.NavMeshAgentPathfinding = (bool)EditorGUILayout.Toggle(label_NavMeshAgentPathfinding, (bool)gController.AI.NavMeshAgentPathfinding);
+                        if(gController.AI.NavMeshAgentPathfinding)
+                            gController.AI.SelectedPathfinder = pfds[0];
+                    } else {
+                        gController.AI.NavMeshAgentPathfinding = false;
+                    }
                 }
+                   
             }
 
             /* Body */
             gShowBody = EditorGUILayout.Foldout(gShowBody, "Body") && gController.Body != null;
             if(gShowBody) {
-                // gController.Body.SteeringNavigation = (bool)EditorGUILayout.Toggle(label_BodyNavigation, (bool)gController.Body.SteeringNavigation);
-                // gController.Body.NavMeshNavigation = (bool)EditorGUILayout.Toggle(label_NavMeshNavigation, (bool)gController.Body.NavMeshNavigation);
                 EditorGUILayout.BeginHorizontal();
                 EditorGUILayout.LabelField(label_BodyNavigation);
                 gController.Body.Navigation = (NAV_STATE)EditorGUILayout.EnumPopup((NAV_STATE)gController.Body.Navigation);

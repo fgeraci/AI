@@ -80,6 +80,9 @@ namespace Pathfinding {
             get { return g_Weight; }
             set { g_Weight = value;  }
         }
+
+        public string DisplayWeight;
+
         public bool Selected;
 
         public NODE_STATUS NodeStatus {
@@ -209,6 +212,7 @@ destroy_tile:
 
         #region Private_Functions
         private void CreateTileText() {
+            if (g_TileText != null) GameObject.Destroy(g_TileText);
             g_TileText = new GameObject();
             g_TileText.name = "TileText";
             g_TileText.transform.Rotate(Up, 90f);
@@ -221,7 +225,7 @@ destroy_tile:
             tm.characterSize = 0.2f;
             tm.anchor = TextAnchor.UpperCenter;
             g_TileText.transform.parent = g_Tile.transform;
-            tm.text = "Weight: " + Weight;
+            tm.text = "Weight: " + DisplayWeight;
         }
         #endregion
     }

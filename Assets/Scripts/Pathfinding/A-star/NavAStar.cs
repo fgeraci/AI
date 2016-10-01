@@ -32,9 +32,11 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
 
     private NPCController g_NPCController;
     private Vector3 g_TargetLocation;
-    private HashSet<NavNode> g_VisitedList;
+    HashSet<NavNode> g_ClosedList;
+    HashSet<NavNode> g_OpenList;
     private SortedList<float,NavNode> g_Fringe;
     private NavGrid g_Grid;
+
     #endregion
 
     #region Public_Functions
@@ -86,11 +88,6 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
                     }
                 break;
             }
-            if (from.NodeStatus == NavNode.NODE_STATUS.HARD_HIGHWAY) {
-                if(from.NodeStatus == NavNode.NODE_STATUS.HARD_HIGHWAY) {
-
-                }
-            }
         }
         Debug.Log("Cost calculated: " + totalCost);
         return totalCost;
@@ -109,13 +106,11 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
     public List<Vector3> ConstructPath(NavNode goal, Dictionary<NavNode,NavNode> parents) {
         List<Vector3> path = new List<Vector3>(parents.Count + 1);
         List<NavNode> pathToPrint = new List<NavNode>(parents.Count + 1);
-        g_VisitedList = new HashSet<NavNode>();
         path.Insert(0, goal.Position);
         pathToPrint.Insert(0, goal);
         bool done = false;
         NavNode curr = goal;
         while (!done) {
-            g_VisitedList.Add(curr);
             if (curr == parents[curr]) done = true;
             curr.SetHighlightTile(true, curr == goal ? Color.green : Color.yellow, 0.8f);
             curr = parents[curr];
@@ -142,7 +137,8 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
             g_TargetLocation = to;
             Dictionary<NavNode, float> gVal = new Dictionary<NavNode, float>();
             Dictionary<NavNode, float> fVal = new Dictionary<NavNode, float>();
-            HashSet<NavNode> closedList = new HashSet<NavNode>();
+            g_ClosedList = new HashSet<NavNode>();
+            g_OpenList = new HashSet<NavNode>();
             Dictionary<NavNode, NavNode> parents = new Dictionary<NavNode, NavNode>();
             
             g_Fringe = new SortedList<float, NavNode>(new DuplicateKeyComparer<float>());
@@ -150,16 +146,16 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
             gVal.Add(fromNode, 0f);
             fVal.Add(fromNode,ComputeNodeHeuristic(fromNode));
             g_Fringe.Add(fVal[fromNode], fromNode);
-            closedList.Add(fromNode);
+            g_OpenList.Add(fromNode);
+            g_ClosedList.Add(fromNode);
 
-
-            while (g_Fringe.Count > 0) {
+            while (g_OpenList.Count > 0) {
 
                 // get next best node
                 NavNode n = g_Fringe.Values[0];
                 g_Fringe.RemoveAt(0);
-                closedList.Remove(fromNode);
-                closedList.Add(fromNode);
+                g_OpenList.Remove(n);
+                g_ClosedList.Add(n);
                 
                 // test goal
                 if (IsCurrentStateGoal(new System.Object[] { n })) {
@@ -172,17 +168,20 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
                 // loop adjacent
                 Dictionary<NavNode, GRID_DIRECTION> neighbors = g_Grid.GetNeighborNodes(n);
                 foreach(NavNode neighbor in neighbors.Keys) {
-                    if(!closedList.Contains(neighbor) && neighbor.IsWalkable()) {
+                    if(!g_ClosedList.Contains(neighbor) && neighbor.IsWalkable()) {
                         float val = gVal[n] + ComputeNodeCost(n, neighbor, neighbors[neighbor]);
-                        bool inFringe = closedList.Contains(neighbor);
-                        if (!inFringe || val <= gVal[n]) {
-                            gVal.Add(neighbor,val);
-                            fVal.Add(neighbor,ComputeNodeHeuristic(neighbor));
+                        bool inFringe = g_OpenList.Contains(neighbor);
+                        if (!inFringe) {
+                            gVal.Add(neighbor, val);
+                            fVal.Add(neighbor, UseHeuristic ? ComputeNodeHeuristic(neighbor) + val : gVal[neighbor]);
                             parents.Add(neighbor, n);
-                            if(!inFringe) {
-                                g_Fringe.Add(fVal[neighbor], neighbor);
-                                closedList.Add(neighbor);
-                            }
+                            g_OpenList.Add(neighbor);
+                            g_Fringe.Add(fVal[neighbor], neighbor);
+                            neighbor.DisplayWeight = fVal[neighbor].ToString();
+                            neighbor.SetHighlightTile(true, Color.white, 0.4f);
+                        }
+                        if (val < gVal[n]) {
+                            parents.Add(neighbor, n);
                         }
                     }
                 }
@@ -194,7 +193,10 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
     }
 
     public void ClearPath() {
-        foreach(NavNode n in g_VisitedList) {
+        foreach (NavNode n in g_ClosedList) {
+            n.SetHighlightTile(false, Color.black, 0f);
+        }
+        foreach (NavNode n in g_OpenList) {
             n.SetHighlightTile(false, Color.black, 0f);
         }
     }
@@ -237,7 +239,8 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
     void Start() {
         g_NPCController = GetComponent<NPCController>();
         g_Fringe = new SortedList<float, NavNode>(new DuplicateKeyComparer<float>());
-        g_VisitedList = new HashSet<NavNode>();
+        g_ClosedList = new HashSet<NavNode>();
+        g_OpenList = new HashSet<NavNode>();
     }
 
     void Update() {

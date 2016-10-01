@@ -31,8 +31,14 @@ namespace NPC {
         public string SelectedPathfinder = "None";
 
         [SerializeField]
+        public bool NavMeshAgentPathfinding = false;
+
+        [SerializeField]
         public IPathfinder CurrentPathfinder;
-        
+
+        [SerializeField]
+        private NavMeshAgent gNavMeshAgent;
+
         public Dictionary<string,IPathfinder> Pathfinders {
             get {
                 if (gPathfinders == null) InitPathfinders();
@@ -44,13 +50,12 @@ namespace NPC {
         #region Unity_Methods
         void Reset() {
             this.gNPCController = gameObject.GetComponent<NPCController>();
-            gPathfinders = new Dictionary<string, IPathfinder>();
-            gPathfinders.Add("None", null);
+            InitPathfinders();
         }
 
         void Start() {
             gNPCController = GetComponent<NPCController>();
-            CurrentPathfinder = gPathfinders[SelectedPathfinder];
+            CurrentPathfinder = Pathfinders[SelectedPathfinder];
         }
         #endregion
 
@@ -65,8 +70,14 @@ namespace NPC {
         }
 
         public List<Vector3> FindPath(Vector3 target) {
-            List<Vector3> path = new List<Vector3>();
-            if(CurrentPathfinder == null) {
+            if (NavMeshAgentPathfinding) {
+                gNavMeshAgent.enabled = true;
+                NavMeshPath navMeshPath = new NavMeshPath();
+                gNavMeshAgent.CalculatePath(target,navMeshPath);
+                gNavMeshAgent.enabled = false;
+                return new List<Vector3>(navMeshPath.corners);
+            } else if (CurrentPathfinder == null) {
+                List<Vector3> path = new List<Vector3>();
                 path.Add(target);
                 return path;
             } else {
@@ -80,6 +91,7 @@ namespace NPC {
         private void InitPathfinders() {
             gPathfinders = new Dictionary<string, IPathfinder>();
             gPathfinders.Add("None", null);
+            gNavMeshAgent = GetComponent<NavMeshAgent>();
         }
         #endregion
 
