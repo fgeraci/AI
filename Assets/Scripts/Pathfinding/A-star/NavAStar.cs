@@ -13,6 +13,9 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
 
     #region Members
     [SerializeField]
+    public bool CleanPathOnRestart = true;
+
+    [SerializeField]
     public bool EnableNPCModule = true;
 
     [SerializeField]
@@ -30,8 +33,11 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
     [SerializeField]
     public float HeuristicWeight = 1f;
 
+
+
     private NPCController g_NPCController;
     private Vector3 g_TargetLocation;
+    NavNode g_FromNode;
     HashSet<NavNode> g_ClosedList;
     HashSet<NavNode> g_OpenList;
     private SortedList<float,NavNode> g_Fringe;
@@ -44,12 +50,32 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
 
     public void DryRunAlgorithm() {
         if(DryRunAlgo) {
-            for(int i = 0; i < DryRunTests; ++i) {
-
+            RaycastHit hit;
+            List<Vector3> pathList = new List<Vector3>();
+            if (Physics.Raycast(new Ray(transform.position + (transform.up * 0.2f), -1 * transform.up), out hit)) {
+                g_Grid = hit.collider.GetComponent<NavGrid>();
+                int succeed = 0;
+                while(succeed < DryRunTests) {
+                    int x = Mathf.RoundToInt(UnityEngine.Random.Range(0, g_Grid.GridDimensions.x - 1)),
+                        y = Mathf.RoundToInt(UnityEngine.Random.Range(0, g_Grid.GridDimensions.y - 1));
+                    g_FromNode = g_Grid.GetGridNode(x, y);
+                    if (g_FromNode != null) {
+                        NavNode to = null;
+                        do {
+                            x = Mathf.RoundToInt(UnityEngine.Random.Range(0, g_Grid.GridDimensions.x - 1));
+                            y = Mathf.RoundToInt(UnityEngine.Random.Range(0, g_Grid.GridDimensions.x - 1));
+                            to = g_Grid.GetGridNode(x, y);
+                        } while (to == null);
+                        g_FromNode.SetHighlightTile(true, Color.black, 1f);
+                        FindPath(g_FromNode.Position, to.Position);
+                        succeed++;
+                    }
+                }
             }
             g_NPCController.Debug("Finished algorithm dry run");
-            DryRunAlgo = false;
         }
+        DryRunAlgo = false;
+        g_FromNode = null;
     }
 
     // f(n) = g(n) + h(n)*e
@@ -138,8 +164,8 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
         List<Vector3> pathList = new List<Vector3>();
         if (Physics.Raycast(new Ray(transform.position + (transform.up * 0.2f), -1 * transform.up), out hit)) {
             g_Grid = hit.collider.GetComponent<NavGrid>();
-            NavNode fromNode = g_Grid.GetOccupiedNode(this);
-            if(fromNode == null) {
+            g_FromNode = g_FromNode == null ? g_Grid.GetOccupiedNode(this) : g_FromNode;
+            if(g_FromNode == null) {
                 Debug.Log("NavAStar --> Agent is currently navigating in between nodes, try again please");
                 return pathList;
             }
@@ -153,12 +179,12 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
             Dictionary<NavNode, NavNode> parents = new Dictionary<NavNode, NavNode>();
             
             g_Fringe = new SortedList<float, NavNode>(new DuplicateKeyComparer<float>());
-            parents.Add(fromNode, fromNode);
-            gVal.Add(fromNode, 0f);
-            fVal.Add(fromNode,ComputeNodeHeuristic(fromNode));
-            g_Fringe.Add(fVal[fromNode], fromNode);
-            g_OpenList.Add(fromNode);
-            g_ClosedList.Add(fromNode);
+            parents.Add(g_FromNode, g_FromNode);
+            gVal.Add(g_FromNode, 0f);
+            fVal.Add(g_FromNode,ComputeNodeHeuristic(g_FromNode));
+            g_Fringe.Add(fVal[g_FromNode], g_FromNode);
+            g_OpenList.Add(g_FromNode);
+            g_ClosedList.Add(g_FromNode);
 
             while (g_OpenList.Count > 0) {
 
@@ -173,7 +199,7 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
                     n.SetHighlightTile(true, Color.green, 1f);
                     goalNode = n;
                     pathList = ConstructPath(goalNode, parents);
-                    return pathList;
+                    goto exit_pathfinding;
                 }
 
                 // loop adjacent
@@ -192,6 +218,7 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
                             neighbor.SetHighlightTile(true, Color.white, 0.4f);
                         }
                         if (val < gVal[n]) {
+                            if (parents.ContainsKey(neighbor)) parents.Remove(neighbor);
                             parents.Add(neighbor, n);
                         }
                     }
@@ -200,15 +227,19 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
         } else {
             g_NPCController.Debug("NavAStar --> Pathfinder not on grid");    
         }
+exit_pathfinding:
+        g_FromNode = null;
         return pathList;
     }
 
     public void ClearPath() {
-        foreach (NavNode n in g_ClosedList) {
-            n.SetHighlightTile(false, Color.black, 0f);
-        }
-        foreach (NavNode n in g_OpenList) {
-            n.SetHighlightTile(false, Color.black, 0f);
+        if(CleanPathOnRestart) {
+            foreach (NavNode n in g_ClosedList) {
+                n.SetHighlightTile(false, Color.black, 0f);
+            }
+            foreach (NavNode n in g_OpenList) {
+                n.SetHighlightTile(false, Color.black, 0f);
+            }
         }
     }
 
@@ -252,6 +283,9 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
         g_Fringe = new SortedList<float, NavNode>(new DuplicateKeyComparer<float>());
         g_ClosedList = new HashSet<NavNode>();
         g_OpenList = new HashSet<NavNode>();
+        if(DryRunAlgo) {
+            DryRunAlgorithm();
+        }
     }
 
     void Update() {

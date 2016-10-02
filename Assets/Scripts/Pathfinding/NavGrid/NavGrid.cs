@@ -547,6 +547,13 @@ restart_highways:
                 (coord.x < g_Grid.GetLength(0)) && 
                 (coord.y < g_Grid.GetLength(1));
         }
+
+        public NavNode GetGridNode(int x, int y) {
+            if (IsValid(new Vector2(x,y)) && g_Grid[x, y].IsWalkable()) {
+                return g_Grid[x, y];
+            } else return null;
+        }
+
         public NavNode GetNeighborNode(NavNode current, GRID_DIRECTION dir) {
             return null;
         }
