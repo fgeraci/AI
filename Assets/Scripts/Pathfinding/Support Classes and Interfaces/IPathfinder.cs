@@ -20,6 +20,8 @@ namespace Pathfinding {
         List<Vector3> ConstructPath(NavNode goal, Dictionary<NavNode, NavNode> parents);
 
         void ClearPath();
+
+        void DryRunAlgorithm();
 	
     }
 }

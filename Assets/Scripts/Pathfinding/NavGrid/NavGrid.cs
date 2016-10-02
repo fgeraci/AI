@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using System;
 using System.IO;
 using System.Collections;
 using System.Collections.Generic;
@@ -39,7 +40,10 @@ namespace Pathfinding {
         public bool         AddBlockerOnScene;
         public float        MinimunBlocked;
         public LayerMask    UnwalkableMask;
+
+        [SerializeField]
         public Vector2      GridDimensions;
+
         public GRID_SCALE   GridScale = GRID_SCALE.ONE;
         private float       g_GridScale = 1.0f;
         public bool         PaintGridOnScene = false;
@@ -50,13 +54,14 @@ namespace Pathfinding {
         public int          RandomHeavyAreas = 8;       // Default value
         public int          RandomHighways = 4;         // Default value
         public float        BlockingHeight = 2.0f;
+
         [SerializeField]
         NavNode[,]          g_Grid;
+
         public float        EasyWeight = (float)        NavNode.NODE_TYPE.HIGHWAY;
         public float        NormalWeight = (float)      NavNode.NODE_TYPE.WALKABLE;
         public float        MediumWeight = (float)      NavNode.NODE_TYPE.HARD_TO_WALK;
         public float        NotAvailableWeight = (float)NavNode.NODE_TYPE.NONWALKABLE;
-        private bool        g_TileSelected = false;
         private NavNode     g_SelectedTile;
         public float        SelectedTileWeight = 1;
         public Vector2      SelectedTile;
@@ -65,41 +70,46 @@ namespace Pathfinding {
         #region Private_Functions
 
         private void PopulateGrid() {
-            if(LoadFromFile) {
-
-            } else {
-                int blocked = 0;
-                g_WalkedOnNodes = new Dictionary<IPathfinder, NavNode>();
-                g_GridScale = 1f / (float) GridScale;
-                float nodeDiameter = g_NodeRadius * 2 * g_GridScale;
-                GridDimensions.x = Mathf.RoundToInt(transform.localScale.x / nodeDiameter);
-                GridDimensions.y = Mathf.RoundToInt(transform.localScale.z / nodeDiameter);
-                int tilesX = (int) GridDimensions.x,
-                    tilesY = (int) GridDimensions.y;
-                g_Grid = new NavNode[tilesX, tilesY];
-                Vector3 gridWorldBottom = (transform.position - (transform.right * GridDimensions.x / 2) -
-                    (transform.forward * GridDimensions.y / 2) + new Vector3(g_NodeRadius,0.0f,g_NodeRadius)) * g_GridScale;
-                for(int row = 0; row < tilesX; ++row) {
-                    for (int col = 0; col < tilesY; ++col) {
-                        NavNode node = new NavNode(
-                            gridWorldBottom + (transform.right * (nodeDiameter) * row) + transform.forward * (nodeDiameter) * col,
-                            new Vector2(row,col),
-                            transform.up,
-                            BlockingHeight,
-                            true,
-                            g_NodeRadius * g_GridScale,
-                            this);
-                        if (!node.Available) blocked++;
-                        g_Grid[row, col] = node;
+            
+            int blocked = 0;
+            g_WalkedOnNodes = new Dictionary<IPathfinder, NavNode>();
+            g_GridScale = 1f / (float) GridScale;
+            float nodeDiameter = g_NodeRadius * 2 * g_GridScale;
+            GridDimensions.x = Mathf.RoundToInt(transform.localScale.x / nodeDiameter);
+            GridDimensions.y = Mathf.RoundToInt(transform.localScale.z / nodeDiameter);
+            int tilesX = (int) GridDimensions.x,
+                tilesY = (int) GridDimensions.y;
+            g_Grid = new NavNode[tilesX, tilesY];
+            Vector3 gridWorldBottom = (transform.position - (transform.right * GridDimensions.x / 2) -
+                (transform.forward * GridDimensions.y / 2) + new Vector3(g_NodeRadius,0.0f,g_NodeRadius)) * g_GridScale;
+            for(int row = 0; row < tilesX; ++row) {
+                for (int col = 0; col < tilesY; ++col) {
+                    NavNode node = new NavNode(
+                        gridWorldBottom + (transform.right * (nodeDiameter) * row) + transform.forward * (nodeDiameter) * col,
+                        new Vector2(row,col),
+                        transform.up,
+                        BlockingHeight,
+                        true,
+                        g_NodeRadius * g_GridScale,
+                        this);
+                    if (!node.IsWalkable()) {
+                        blocked++;
+                        node.NodeStatus = NavNode.NODE_STATUS.BLOCKED;
                     }
+                    g_Grid[row, col] = node;
                 }
+            }
+            if (LoadFromFile && Application.isPlaying) {
+                WriteGridToFile = false;
+                ReadGridFromFile();
+            } else {
                 int targetBlocked = (int)(MinimunBlocked * (tilesX * tilesY));
-                if (AddBlockerOnScene && blocked < targetBlocked) {
+                RandomizeHardWalkingAreas(RandomHeavyAreas, 31);
+                RandomizeHighways(RandomHighways);
+                if (AddBlockerOnScene && (blocked < targetBlocked)) {
                     RandomizeBlockers(targetBlocked - blocked);
                     AddBlockerOnScene = false;
                 }
-                RandomizeHardWalkingAreas(RandomHeavyAreas, 31);
-                RandomizeHighways(RandomHighways);
             }
         }
 
@@ -115,8 +125,8 @@ namespace Pathfinding {
             obstaclesGO.name = "Obstacles";
             obstacles = obstaclesGO.transform;
             while (!done) {
-                int x = (int)Random.Range(0, g_Grid.GetLength(0));
-                int y = (int)Random.Range(0, g_Grid.GetLength(1));
+                int x = (int)UnityEngine.Random.Range(0, g_Grid.GetLength(0));
+                int y = (int)UnityEngine.Random.Range(0, g_Grid.GetLength(1));
                 if (!g_Grid[x, y].Available) continue;
                 NavNode n = g_Grid[x, y];
                 GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -125,6 +135,7 @@ namespace Pathfinding {
                 cube.AddComponent<Rigidbody>();
                 cube.GetComponent<BoxCollider>().size = new Vector3(0.8f, 0.8f, 0.8f);
                 cube.transform.parent = obstacles;
+                n.NodeStatus = NavNode.NODE_STATUS.BLOCKED;
                 success++;
                 if (success >= blockers) done = true;
             }
@@ -142,8 +153,8 @@ namespace Pathfinding {
             for(int i = 0; i < areas; ++i) {
 
                 Vector2 pos = new Vector2(
-                    Mathf.RoundToInt(Random.Range(0, limitX)),
-                    Mathf.RoundToInt(Random.Range(0, limitY)));
+                    Mathf.RoundToInt(UnityEngine.Random.Range(0, limitX)),
+                    Mathf.RoundToInt(UnityEngine.Random.Range(0, limitY)));
 
                 int xOff = (int)(pos.x - (spread / 2)),
                     yOff = (int)(pos.y - (spread / 2));
@@ -152,7 +163,11 @@ namespace Pathfinding {
                     for (int c = 0; c < spread; ++c) {
                         if (IsValid(new Vector2(xOff + r, yOff + c))) {
                             g_Grid[xOff + r, yOff + c].Weight = (float) NavNode.NODE_TYPE.HARD_TO_WALK;
-                            g_Grid[xOff + r, yOff + c].NodeStatus = NavNode.NODE_STATUS.HARD_TO_WALK;
+                            if(g_Grid[xOff + r, yOff + c].IsWalkable()) {
+                                g_Grid[xOff + r, yOff + c].NodeStatus = NavNode.NODE_STATUS.HARD_TO_WALK;
+                            } else {
+                                g_Grid[xOff + r, yOff + c].NodeStatus = NavNode.NODE_STATUS.HARD_BLOCKED;
+                            }
                         }
                     }
                 }
@@ -187,13 +202,13 @@ restart_highways:
                         yBase = 0;
 
                     bool onX = false;
-                    if(Random.Range(0f,1f) <= 0.5f) {
-                        xBase = (int) Random.Range(0, g_Grid.GetLength(0) - 1);
+                    if(UnityEngine.Random.Range(0f,1f) <= 0.5f) {
+                        xBase = (int)UnityEngine.Random.Range(0, g_Grid.GetLength(0) - 1);
                         yBase = 0;
                         onX = true;
                     } else {
                         xBase = 0;
-                        yBase = (int) Random.Range(0 , g_Grid.GetLength(1) - 1);
+                        yBase = (int) UnityEngine.Random.Range(0 , g_Grid.GetLength(1) - 1);
                     }
 
                     Dictionary<NavNode,bool> toChange = new Dictionary<NavNode, bool>();
@@ -252,7 +267,7 @@ restart_highways:
                             }
 
                             if (count % 20 == 0) {
-                                float turn = Random.Range(0f, 1f);
+                                float turn = UnityEngine.Random.Range(0f, 1f);
                                 if (turn >= 0.6f) {
                                     if (xBase == 0)
                                         xWalk = true;
@@ -290,6 +305,86 @@ restart_highways:
             }
         }
 
+        private void ReadGridFromFile() {
+            if (File.Exists(FileName)) {
+                GameObject obstaclesGO = GameObject.Find("Obstacles");
+                Transform obstacles = null;
+                if (obstaclesGO != null) {
+                    GameObject.DestroyImmediate(obstaclesGO);
+                }
+                obstaclesGO = new GameObject();
+                obstaclesGO.name = "Obstacles";
+                obstacles = obstaclesGO.transform;
+                string[] lines = File.ReadAllLines(FileName);
+                int r = -1;
+                NavNode n = null;
+                GameObject cube = null;
+                // each row
+                foreach (string l in lines) {
+                    string[] line = l.Split(',');
+                    if(r < 0) {
+                        int x = Int32.Parse(line[0]),
+                            y = Int32.Parse(line[1]);
+                        if (x != g_Grid.GetLength(0) || y != g_Grid.GetLength(1)) {
+                            Debug.Log("NavGrid --> Loading from file failed since the current grid has not the same dimensions as the file's one");
+                        }
+                    } else {
+                        //each column
+                        for (int c = 0; c < g_Grid.GetLength(1); ++c) {
+                            try {
+                                int val = Int32.Parse(line[c]);
+                                switch(val) {
+                                    case (int) NavNode.NODE_STATUS.BLOCKED:
+                                        g_Grid[r, c].Weight = (float)NavNode.NODE_TYPE.NONWALKABLE;
+                                        g_Grid[r, c].NodeStatus = NavNode.NODE_STATUS.BLOCKED;
+                                        // spawn cube
+                                        n = g_Grid[r, c];
+                                        cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                                        cube.transform.localScale = new Vector3(n.Radius * 1.5f, n.Radius * 2, n.Radius * 1.5f);
+                                        cube.transform.position = n.Position + (new Vector3(0f, n.Radius, 0f));
+                                        cube.AddComponent<Rigidbody>();
+                                        cube.GetComponent<BoxCollider>().size = new Vector3(0.8f, 0.8f, 0.8f);
+                                        cube.transform.parent = obstacles;
+                                        break;
+                                    case (int)NavNode.NODE_STATUS.REGULAR:
+                                        g_Grid[r, c].NodeStatus = NavNode.NODE_STATUS.REGULAR;
+                                        break;
+                                    case (int)NavNode.NODE_STATUS.HARD_TO_WALK:
+                                        g_Grid[r,c].Weight = (float)NavNode.NODE_TYPE.HARD_TO_WALK;
+                                        g_Grid[r, c].NodeStatus = NavNode.NODE_STATUS.HARD_TO_WALK;
+                                        break;
+                                    case (int)NavNode.NODE_STATUS.HARD_BLOCKED:
+                                        g_Grid[r, c].Weight = (float)NavNode.NODE_TYPE.HARD_TO_WALK;
+                                        g_Grid[r, c].NodeStatus = NavNode.NODE_STATUS.HARD_TO_WALK;
+                                        n = g_Grid[r, c];
+                                        cube  = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                                        cube.transform.localScale = new Vector3(n.Radius * 1.5f, n.Radius * 2, n.Radius * 1.5f);
+                                        cube.transform.position = n.Position + (new Vector3(0f, n.Radius, 0f));
+                                        cube.AddComponent<Rigidbody>();
+                                        cube.GetComponent<BoxCollider>().size = new Vector3(0.8f, 0.8f, 0.8f);
+                                        cube.transform.parent = obstacles;
+                                        break;
+
+                                }
+                            } catch(System.FormatException e) {
+                                // easy highway
+                                if(line[c].Contains((char)NavNode.NODE_STATUS.REGULAR_HIGHWAY + "")) {
+                                    g_Grid[r, c].NodeStatus = NavNode.NODE_STATUS.REGULAR_HIGHWAY;
+                                } 
+                                // hard highway
+                                else {
+                                    g_Grid[r, c].NodeStatus = NavNode.NODE_STATUS.HARD_HIGHWAY;
+                                }
+                                g_Grid[r, c].Weight -= g_Grid[r, c].Weight + (float) NavNode.NODE_TYPE.HIGHWAY;
+                            }
+                        }
+                    }
+                    ++r;
+                }
+            }
+            LoadFromFile = false;
+        }
+
         #endregion Private_Functions
 
         #region Unity_Methods
@@ -305,9 +400,10 @@ restart_highways:
             // current node occupied by an agent
             g_WalkedOnNodes = new Dictionary<IPathfinder, NavNode>();
             if(WriteGridToFile) {
+                LoadFromFile = false;
                 if(File.Exists(FileName)) {
                     FileName = FileName.Substring(0, FileName.IndexOf(".txt")) + "_copy.txt";
-                    // TODO - create file here
+                    Debug.Log("NavGrid --> Creating copy of existing file");
                 }
                 StreamWriter sw = File.CreateText(FileName);
                 sw.WriteLine(g_Grid.GetLength(0)+","+g_Grid.GetLength(1));

@@ -1,8 +1,11 @@
 ﻿using UnityEngine;
+using System;
 using System.Collections;
+
 
 namespace Pathfinding {
 
+    [Serializable]
     public class NavNode {
 
         #region Enums
@@ -17,6 +20,7 @@ namespace Pathfinding {
             BLOCKED = 0,
             REGULAR = 1,
             HARD_TO_WALK = 2,
+            HARD_BLOCKED = 3,
             REGULAR_HIGHWAY = 'a',
             HARD_HIGHWAY = 'b'
         }

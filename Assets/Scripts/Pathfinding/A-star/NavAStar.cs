@@ -36,10 +36,21 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
     HashSet<NavNode> g_OpenList;
     private SortedList<float,NavNode> g_Fringe;
     private NavGrid g_Grid;
-
+    public bool DryRunAlgo = false;
+    public int DryRunTests = 0;
     #endregion
 
     #region Public_Functions
+
+    public void DryRunAlgorithm() {
+        if(DryRunAlgo) {
+            for(int i = 0; i < DryRunTests; ++i) {
+
+            }
+            g_NPCController.Debug("Finished algorithm dry run");
+            DryRunAlgo = false;
+        }
+    }
 
     // f(n) = g(n) + h(n)*e
     public float ComputeNodeCost(NavNode from, NavNode to, GRID_DIRECTION dir) {
