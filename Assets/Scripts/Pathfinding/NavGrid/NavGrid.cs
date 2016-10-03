@@ -425,8 +425,12 @@ restart_highways:
         }
 
         void Update() {
+            try {
             SelectedTile.x = Mathf.Clamp(SelectedTile.x, 0, g_Grid.GetLength(0) - 1);
             SelectedTile.y = Mathf.Clamp(SelectedTile.y, 0, g_Grid.GetLength(1) - 1);
+            } catch (System.Exception e) {
+                SelectedTile.x = SelectedTile.y = 0f;
+            }
             foreach (NavNode node in g_Grid) {
                 node.IsWalkable();
                 node.SetActiveTileText(DisplayTileText);
