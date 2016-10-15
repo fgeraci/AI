@@ -6,7 +6,8 @@ using System.Collections.Generic;
 namespace NPC {
 
     public class NPCCamController : MonoBehaviour {
-    
+
+        public Transform InitTarget;
         public float Speed = 1.0f;
         public float CameraRotationSpeed = 20f;
         public float IsometricHeight = 4.0f;
@@ -220,12 +221,12 @@ namespace NPC {
         }
 
         private void SetIsometricView() {
-            Vector3 curPos = Camera.position;
+            Vector3 curPos = InitTarget == null ? Camera.position : InitTarget.position;
             Camera.rotation = Quaternion.identity;
             Camera.Rotate(Vector3.up, 90.0f);
             Camera.Rotate(Vector3.right, 35.0f);
             Camera.position = new Vector3(curPos.x, IsometricHeight, curPos.z);
-            Camera.position -= (Vector3.right * 0.5f);
+            Camera.position -= (Vector3.right * 4f);
         }
     }
 

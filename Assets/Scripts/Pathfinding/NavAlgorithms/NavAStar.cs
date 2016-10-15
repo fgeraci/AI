@@ -177,50 +177,47 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
         float totalCost = 0f;
         if (GRID_DIRECTION.CURRENT != dir) {
             NavNode.NODE_STATUS fromStatus = from.NodeStatus;
-            switch(dir) {
-            // diagonals
-            case GRID_DIRECTION.NORTH_EAST:
-            case GRID_DIRECTION.NORTH_WEST:
-            case GRID_DIRECTION.SOUTH_EAST:
-            case GRID_DIRECTION.SOUTH_WEST:
-                if (from.NodeType == NavNode.NODE_TYPE.WALKABLE) {
-                    totalCost = to.NodeType == NavNode.NODE_TYPE.HARD_TO_WALK ? 
-                        (Mathf.Sqrt(2f) + Mathf.Sqrt(8f)) / 2f :
-                        Mathf.Sqrt(2);
-                } else if (from.NodeType == NavNode.NODE_TYPE.HARD_TO_WALK) {
-                    totalCost = to.NodeType == NavNode.NODE_TYPE.HARD_TO_WALK ? 
-                        Mathf.Sqrt(8) : 
-                        Mathf.Sqrt(2);
-                }
-                if (from.NodeStatus == NavNode.NODE_STATUS.HARD_HIGHWAY) {
-                    if (from.NodeStatus == NavNode.NODE_STATUS.HARD_HIGHWAY) {
-
+            switch (dir) {
+                // diagonals
+                case GRID_DIRECTION.NORTH_EAST:
+                case GRID_DIRECTION.NORTH_WEST:
+                case GRID_DIRECTION.SOUTH_EAST:
+                case GRID_DIRECTION.SOUTH_WEST:
+                    totalCost += Mathf.Sqrt(2);
+                    if (from.NodeType == NavNode.NODE_TYPE.WALKABLE) {
+                        totalCost = to.NodeType == NavNode.NODE_TYPE.HARD_TO_WALK ?
+                            (Mathf.Sqrt(2f) + Mathf.Sqrt(8f)) / 2f :
+                            Mathf.Sqrt(2);
+                    } else if (from.NodeType == NavNode.NODE_TYPE.HARD_TO_WALK) {
+                        totalCost = to.NodeType == NavNode.NODE_TYPE.HARD_TO_WALK ?
+                            Mathf.Sqrt(8) :
+                            Mathf.Sqrt(2);
                     }
-                }
-                break;
-            // straights
-            default:
+                    if (to.NodeStatus == NavNode.NODE_STATUS.HARD_HIGHWAY || to.NodeStatus == NavNode.NODE_STATUS.REGULAR_HIGHWAY) {
+                        totalCost -= (from.NodeType == NavNode.NODE_TYPE.WALKABLE) ?
+                             (to.NodeStatus == NavNode.NODE_STATUS.HARD_HIGHWAY ? 0.5f : 0.375f) :
+                             (to.NodeStatus == NavNode.NODE_STATUS.REGULAR_HIGHWAY ? 0.375f : 0.25f);
+                    }
+                    break;
+                // straights
+                default:
+                    if (from.NodeType == NavNode.NODE_TYPE.WALKABLE) {
+                        totalCost = to.NodeType == NavNode.NODE_TYPE.HARD_TO_WALK ?
+                            (float)to.NodeType - 0.5f :
+                            (float)to.NodeType;
+                    } else if (from.NodeType == NavNode.NODE_TYPE.HARD_TO_WALK) {
+                        totalCost = (float)to.NodeType - 0.5f;
+                    }
                     // Highways
-                    if (from.NodeStatus == NavNode.NODE_STATUS.HARD_HIGHWAY || 
-                            to.NodeStatus == NavNode.NODE_STATUS.HARD_HIGHWAY) {
-                        totalCost = from.NodeType == NavNode.NODE_TYPE.WALKABLE ?
-                            (to.NodeType == NavNode.NODE_TYPE.WALKABLE ? 0.25f : 0.375f) :
-                            (to.NodeType == NavNode.NODE_TYPE.WALKABLE ? 0.25f : 0.5f);
-                    } 
-                    // Regular
-                    else {
-                        if (from.NodeType == NavNode.NODE_TYPE.WALKABLE) {
-                            totalCost = to.NodeType == NavNode.NODE_TYPE.HARD_TO_WALK ?
-                                (float)to.NodeType - 0.5f :
-                                (float)to.NodeType;
-                        } else if (from.NodeType == NavNode.NODE_TYPE.HARD_TO_WALK) {
-                            totalCost = (float)to.NodeType - 0.5f;
-                        }
+                    if (to.NodeStatus == NavNode.NODE_STATUS.HARD_HIGHWAY ||
+                        to.NodeStatus == NavNode.NODE_STATUS.REGULAR_HIGHWAY) {
+                        totalCost = (from.NodeStatus == NavNode.NODE_STATUS.REGULAR) ?
+                            (to.NodeStatus == NavNode.NODE_STATUS.REGULAR_HIGHWAY ? 0.25f : 0.375f) :
+                            (to.NodeStatus == NavNode.NODE_STATUS.HARD_HIGHWAY ? 0.5f : 0.375f);
                     }
-                break;
+                    break;
             }
         }
-        Debug.Log("Cost calculated: " + totalCost);
         return totalCost;
     }
 
@@ -260,9 +257,11 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
         List<Vector3> pathList = new List<Vector3>();
         if (Physics.Raycast(new Ray(transform.position + (transform.up * 0.2f), -1 * transform.up), out hit)) {
             g_Grid = hit.collider.GetComponent<NavGrid>();
+            if(CleanPathOnRestart)
+                g_Grid.CleanAll();
             g_FromNode = g_FromNode == null ? g_Grid.GetOccupiedNode(this) : g_FromNode;
             if(g_FromNode == null) {
-                Debug.Log("NavAStar --> Agent is currently navigating in between nodes, try again please");
+                g_NPCController.Debug("NavAStar --> Agent is currently navigating in between nodes, try again please");
                 return pathList;
             }
                 
@@ -341,17 +340,6 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
         return pathList;
     }
 
-    public void ClearPath() {
-        if(CleanPathOnRestart) {
-            foreach (NavNode n in g_ClosedList) {
-                n.SetHighlightTile(false, Color.black, 0f);
-            }
-            foreach (NavNode n in g_OpenList) {
-                n.SetHighlightTile(false, Color.black, 0f);
-            }
-        }
-    }
-
     public bool IsEnabled() {
         return EnableNPCModule;
     }
@@ -361,7 +349,7 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
     }
 
     public string NPCModuleName() {
-        return "A* Algorithm";
+        return "A*";
     }
 
     public NPC_MODULE_TYPE NPCModuleType() {
@@ -403,7 +391,7 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
         if(g_TargetLocation != Vector3.zero
             && ClearPathOnArrival 
             && Vector3.Distance(g_NPCController.transform.position, g_TargetLocation) < 0.5f) {
-            ClearPath();
+            g_Grid.CleanAll();
             g_TargetLocation = Vector3.zero;
         }
     }
@@ -415,6 +403,12 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
     public bool IsCurrentStateGoal(System.Object[] states = null) {
         NavNode curNode = (NavNode)states[0];
         return Vector3.Distance(curNode.Position, g_TargetLocation) < curNode.Radius * 2f;
+    }
+
+    public void ClearPath() {
+        if (g_Fringe != null) g_Fringe.Clear();
+        if (g_OpenList != null) g_OpenList.Clear();
+        if (g_ClosedList != null) g_ClosedList.Clear(); 
     }
 
     #endregion

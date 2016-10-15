@@ -53,9 +53,9 @@ namespace NPC {
 
         #region Unity_Methods
         void Reset() {
-            Debug.Log("Initializing NPCPerception...");
+            g_Controller = GetComponent<NPCController>();
+            g_Controller.Debug("Initializing NPCPerception...");
             // add perception fields
-            g_Controller = gameObject.GetComponent<NPCController>();
             GameObject pf;
             Component sCol = g_Controller.GetComponent(PERCEPTION_FIELD_OBJECT);
             if (sCol == null) {
@@ -83,7 +83,7 @@ namespace NPC {
         void OnTriggerEnter(Collider col) {
             IPerceivable p = col as IPerceivable;
             if (p != null) {
-                Debug.Log("I see an " + col.name);
+                g_Controller.Debug("I see an " + col.name);
                 g_PerceivingMap.Add(col.gameObject, p);
             }
         }
@@ -91,7 +91,7 @@ namespace NPC {
         void OnTriggerExit(Collider col) {
             IPerceivable p = col as IPerceivable;
             if (p != null && g_PerceivingMap.ContainsValue(p)) {
-                Debug.Log("I can't see the " + col.name + " no more");
+                g_Controller.Debug("I can't see the " + col.name + " no more");
                 g_PerceivingMap.Remove(col.gameObject);
             }
         }

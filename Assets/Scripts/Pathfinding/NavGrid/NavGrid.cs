@@ -531,11 +531,11 @@ restart_highways:
             }
         }
 
-        public void SetIPathfinderNode(IPathfinder ipf, NavNode node) {
-            if(g_WalkedOnNodes.ContainsKey(ipf) && g_WalkedOnNodes[ipf] != node) {
-                if(Application.isPlaying) g_WalkedOnNodes[ipf].SetHighlightTile(false, Color.grey, 0.5f);
+        public void AddIPathfinderNode(IPathfinder ipf, NavNode node) {
+            if (g_WalkedOnNodes.ContainsKey(ipf) && g_WalkedOnNodes[ipf] != node) {
+                if (Application.isPlaying) g_WalkedOnNodes[ipf].SetHighlightTile(false, Color.grey, 0.5f);
                 g_WalkedOnNodes.Remove(ipf);
-            } else if(!g_WalkedOnNodes.ContainsKey(ipf)) {
+            } else if (!g_WalkedOnNodes.ContainsKey(ipf)) {
                 g_WalkedOnNodes.Add(ipf, node);
                 if (Application.isPlaying) node.SetHighlightTile(true, Color.red, 0.5f);
             }
@@ -556,6 +556,12 @@ restart_highways:
             if (IsValid(new Vector2(x,y)) && g_Grid[x, y].IsWalkable()) {
                 return g_Grid[x, y];
             } else return null;
+        }
+
+        public void CleanAll() {
+            foreach(NavNode n in g_Grid) {
+                n.SetHighlightTile(false, Color.black, 1f);
+            }
         }
 
         public NavNode GetNeighborNode(NavNode current, GRID_DIRECTION dir) {

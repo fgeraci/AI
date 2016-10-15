@@ -193,9 +193,9 @@ destroy_tile:
                           Physics.Raycast(Position + new Vector3(0, 0, Radius), Up, g_BlockingHeight) ||
                           Physics.Raycast(Position + new Vector3(0, 0, -Radius), Up, g_BlockingHeight));
                 if(hit.collider) {
-                    IPathfinder ipf = hit.collider.GetComponent<IPathfinder>();
-                    if (ipf != null) {
-                        g_Grid.SetIPathfinderNode(ipf, this);
+                    IPathfinder[] finder = hit.collider.GetComponents<IPathfinder>();
+                    foreach(IPathfinder ipf in finder) {
+                        g_Grid.AddIPathfinderNode(ipf, this);
                     }
                 }
                 return Available;
@@ -212,6 +212,25 @@ destroy_tile:
             else
                 return Weight > (float)NODE_TYPE.HARD_TO_WALK;
         }
+
+        public override int GetHashCode() {
+            int hash = 13;
+            hash = (hash * 7) + (int) (g_GridPosition.x + g_GridPosition.y);
+            hash = (hash * 7) + (int)(g_GridPosition.x + g_GridPosition.y);
+            hash = (hash * 7) + (int)(g_GridPosition.x + g_GridPosition.y);
+            hash = (hash * 7) + (int)(g_GridPosition.x + g_GridPosition.y);
+            return hash;
+        }
+
+        public override bool Equals(object obj) {
+            if (obj != null) {
+                NavNode other = (NavNode) obj;
+                return other != null && ((int)g_GridPosition.x == (int)other.g_GridPosition.x) 
+                    && ((int)g_GridPosition.y == (int)other.g_GridPosition.y);
+            }
+            return false;
+        }
+
         #endregion
 
         #region Private_Functions
@@ -231,6 +250,7 @@ destroy_tile:
             g_TileText.transform.parent = g_Tile.transform;
             tm.text = "Weight: " + DisplayWeight;
         }
+        
         #endregion
     }
 }

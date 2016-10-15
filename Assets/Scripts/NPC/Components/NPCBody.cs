@@ -321,7 +321,6 @@ namespace NPC {
             if (Navigation != NAV_STATE.DISABLED) {
                 if (Navigation == NAV_STATE.STEERING_NAV) {
                     if (g_NavQueue.Count > 0) {
-                        g_NPCController.Debug("NPCBody --> Handling steering with queue: " + g_NavQueue.Count);
                         HandleSteering();
                     } g_Navigating = false;
                 } else {
