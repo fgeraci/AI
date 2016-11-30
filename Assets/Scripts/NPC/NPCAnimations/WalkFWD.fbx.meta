@@ -166,7 +166,7 @@ ModelImporter:
   animations:
     legacyGenerateAnimations: 4
     bakeSimulation: 0
-    resampleRotations: 1
+    resampleCurves: 1
     optimizeGameObjects: 0
     motionNodeName: 
     animationImportErrors: 
@@ -204,7 +204,66 @@ ModelImporter:
       heightFromFeet: 1
       mirror: 0
       bodyMask: 01000000010000000100000001000000010000000100000001000000010000000100000001000000010000000100000001000000
-      curves: []
+      curves:
+      - name: IK_Right_Foot
+        curve:
+          serializedVersion: 2
+          curve:
+          - time: 0.00078369904
+            value: 0.999382
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+          - time: 0.09970842
+            value: 0.0028305026
+            inSlope: -0.016261833
+            outSlope: -0.016261833
+            tangentMode: 0
+          - time: 0.90963346
+            value: 0.00022788532
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+          - time: 1.004131
+            value: 1.0014135
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+          preInfinity: 2
+          postInfinity: 2
+          rotationOrder: 0
+      - name: IK_Left_Foot
+        curve:
+          serializedVersion: 2
+          curve:
+          - time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+          - time: 0.35910037
+            value: -0.001450842
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+          - time: 0.51117724
+            value: 0.9794788
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+          - time: 0.68647474
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+          - time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+          preInfinity: 3
+          postInfinity: 3
+          rotationOrder: 0
       events: []
       transformMask: []
       maskType: 0

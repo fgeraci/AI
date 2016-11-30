@@ -6,7 +6,7 @@ using System.Collections.Generic;
 namespace NPC {
 
     public class NPCController : MonoBehaviour, IPerceivable {
-        
+
         #region Members
 
         [SerializeField]
@@ -41,8 +41,26 @@ namespace NPC {
         #region Properties
 
         [SerializeField]
-        public bool DebugPrint = true;
+        public bool TestNPC;
 
+        [SerializeField]
+        public Transform TestTargetLocation;
+
+        public HashSet<IPerceivable> PerceivedEntities {
+            get {
+                return gPerception.PerceivedEntities;
+            }
+        }
+
+        public HashSet<IPerceivable> PerceivedAgents {
+            get {
+                return gPerception.PerceivedAgents;
+            }
+        }
+
+        [SerializeField]
+        public bool DebugMode = true;
+        
         public INPCModule[] NPCModules {
             get {
                 if (g_NPCModules == null) return new INPCModule[0];
@@ -51,6 +69,9 @@ namespace NPC {
                 return mods;
             }
         }
+
+        [SerializeField]
+        public PERCEIVEABLE_TYPE EntityType;
 
         [SerializeField]
         public NPCPerception Perception {
@@ -77,8 +98,14 @@ namespace NPC {
         #region Public_Functions
 
         public  void Debug(string msg) {
-            if(DebugPrint) {
+            if(DebugMode) {
                 UnityEngine.Debug.Log(msg);
+            }
+        }
+
+        public void DebugLine(Vector3 from, Vector3 to, Color c) {
+            if (DebugMode) {
+                UnityEngine.Debug.DrawLine(from, to, c);
             }
         }
 
@@ -108,6 +135,17 @@ namespace NPC {
             return g_NPCModules != null && g_NPCModules.ContainsKey(mod.NPCModuleName());
         }
 
+        public void RunTo(Vector3 t) {
+            List<Vector3> path = gAI.FindPath(t);
+            if (path.Count < 1) {
+                Debug("NPCController --> No path found to target location");
+            } else {
+                if (path.Count == 1)
+                    Debug("NPCController --> No pathfinder enabled, defaulting to steering");
+                gBody.RunTo(path);
+            }
+        }
+        
         public void GoTo(Vector3 t) {
             List<Vector3> path = gAI.FindPath(t);
             if (path.Count < 1) {
@@ -119,6 +157,10 @@ namespace NPC {
             }
         }
 
+        public void OrientTowards(Vector3 t) {
+            gBody.OrientTowards(t);
+        }
+        
         public bool AddNPCModule(INPCModule mod) {
             if (g_NPCModules == null) g_NPCModules = new Dictionary<string, INPCModule>();
             if (g_NPCModules.ContainsKey(mod.NPCModuleName())) return false;
@@ -172,7 +214,7 @@ namespace NPC {
         #endregion
 
         #region Private_Functions
-        
+
         private void InitializeNPCComponents() {
             gAI = gameObject.AddComponent<NPCAI>();
             gPerception = gameObject.AddComponent<NPCPerception>();
@@ -207,9 +249,39 @@ namespace NPC {
         #endregion
 
         #region IPerceivable
-        PERCEIVE_WEIGHT IPerceivable.GetPerceptionWeightType() {
+
+        public virtual PERCEIVE_WEIGHT GetPerceptionWeightType() {
             return PERCEIVE_WEIGHT.WEIGHTED;
         }
+
+        public virtual Transform GetTransform() {
+            return this.transform;
+        }
+
+        public Vector3 GetCurrentVelocity() {
+            return gBody.Velocity;
+        }
+
+        public virtual Vector3 GetPosition() {
+            return transform.position;
+        }
+
+        public Vector3 GetForwardDirection() {
+            return transform.forward;
+        }
+
+        public float GetAgentRadius() {
+            return gBody.AgentRadius;
+        }
+
+        public virtual PERCEIVEABLE_TYPE GetNPCEntityType() {
+            return PERCEIVEABLE_TYPE.NPC;
+        }
+
+        public virtual Vector3 GetMainLookAtPoint() {
+            return gBody.Head.position;
+        }
+
         #endregion
 
     }

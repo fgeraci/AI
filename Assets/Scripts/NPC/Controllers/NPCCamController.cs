@@ -5,23 +5,26 @@ using System.Collections.Generic;
 
 namespace NPC {
 
+
     public class NPCCamController : MonoBehaviour {
 
-        public Transform InitTarget;
-        public float Speed = 1.0f;
-        public float CameraRotationSpeed = 20f;
-        public float IsometricHeight = 4.0f;
-        NPCControlManager g_NPCControlManager;
-        
-    
-        Transform Camera = null;
-        private float PanSmoothness = 0.1f;
-        private NPCController Target = null;
-        private bool gPanning = false;
-        private bool gCloseUp = false;
-        private float gMouseX;
-        private float gMouseY;
+        #region Enums
+        public enum CAMERA_CONTROLS {
+            FORWARD = KeyCode.W,
+            BACKWARD = KeyCode.S,
+            LEFT = KeyCode.A,
+            RIGHT = KeyCode.D,
+            ROTATE_LOCAL_LEFT = KeyCode.Q,
+            ROTATE_LOCAL_RIGHT = KeyCode.E,
+            SPEED_UP = KeyCode.LeftShift,
+            SLOW_DOWN = KeyCode.LeftControl,
+            LOOK_AROUND_DRAG = KeyCode.Mouse1,
+            ACTION_ONE = KeyCode.Mouse0,
+            ACTION_TWO = KeyCode.Mouse1
+        }
+        #endregion
 
+        #region Properties
         public bool Targetting {
             get {
                 return CurrentMode == CAMERA_MODE.THIRD_PERSON ||
@@ -29,6 +32,8 @@ namespace NPC {
                     CurrentMode == CAMERA_MODE.ISOMETRIC_FOLLOW;
             }
         }
+
+        public Vector3 MinLimits;
 
         public bool CloseUp {
             get {
@@ -49,13 +54,29 @@ namespace NPC {
             ISOMETRIC,
             ISOMETRIC_FOLLOW
         }
-        
-        public void SetCamera(Transform t) {
-            Camera = t;
-        }
 
-        public void SetTarget(NPCController t) {
-            Target = t;
+        public float Speed = 1.0f;
+        public float RotationSpeed = 20f;
+        public float IsometricHeight = 4.0f;
+        public float ZoomSpeed = 2f;
+        public float ModMultiplier = 1.5f;
+        public float IsometricAngle = 35f;
+        public Vector3 ThirdPersonDistances = new Vector3(0.2f, 0.8f, -0.6f);
+        public Vector3 CloseUpDistances = new Vector3(0.2f, 0.5f, -0.2f);
+        #endregion
+        
+        #region Members
+        NPCControlManager g_NPCControlManager;
+        float PanSmoothness = 0.1f;
+        NPCController Target = null;
+        bool gPanning = false;
+        bool gCloseUp = false;
+        Vector3 g_LastMousePosition;
+        #endregion
+
+        #region Unity_Functions
+        void Update() {
+            g_LastMousePosition = Input.mousePosition;
         }
 
         void Start() {
@@ -68,26 +89,30 @@ namespace NPC {
                 Debug.Log("NPCCamController --> No NPCControlManager with the NPCCamController enabled");
             }
         }
+        #endregion
+
+        #region Public_Functions
+        public void SetTarget(NPCController t) {
+            Target = t;
+        }
 
         public void UpdateCamera() {
+            
+            bool failed = false;
             switch (CurrentMode) {
                 case CAMERA_MODE.FREE:
                     HandleFreeCamera();
                     break;
                 case CAMERA_MODE.FIRST_PERSON:
-                    if (Target == null) {
-                        Debug.Log("NPCCamController --> Can't set this mode without an NPC target");
-                        CurrentMode = CAMERA_MODE.FREE;
-                    } else {
+                    if (Target == null) failed = true;
+                    else {
                         if (!Target.Body.IsIdle)
                             SetFirstPersonView();
                     }
                     break;
                 case CAMERA_MODE.THIRD_PERSON:
-                    if (Target == null) {
-                        Debug.Log("NPCCamController --> Can't set this mode without an NPC target");
-                        CurrentMode = CAMERA_MODE.FREE;
-                    } else {
+                    if (Target == null) failed = true;
+                    else {
                         if (!Target.Body.IsIdle || CloseUp)
                             SetThirdPersonView();
                     }
@@ -95,6 +120,10 @@ namespace NPC {
                 case CAMERA_MODE.ISOMETRIC:
                     HandleIsometricCamera();
                     break;
+            }
+            if(failed) {
+                Debug.Log("NPCCamController --> Can't set this mode without an NPC target");
+                CurrentMode = CAMERA_MODE.FREE;
             }
         }
      
@@ -138,51 +167,56 @@ namespace NPC {
         public void ResetView() {
             UpdateCameraMode(CurrentMode);
         }
+        #endregion
 
-        private void HandleCameraRotation() {
-            if(Input.GetMouseButton(1)) {
-                float mouseYRot = (Input.mousePosition.x - gMouseX) * Time.deltaTime * CameraRotationSpeed;
-                float mouseXRot = (Input.mousePosition.y - gMouseY) * Time.deltaTime * CameraRotationSpeed;
-                // we set the rotation as current angles + delta
-                transform.eulerAngles = new Vector3(-mouseXRot + transform.localEulerAngles.x, 
-                    transform.localEulerAngles.y + mouseYRot , 0);
-            }
-        }
-
+        #region Private_Functions
         private void HandleFreeCamera() {
-            float speedModifier = Input.GetKey(KeyCode.LeftShift) ? Speed * 2f : Speed;
-            HandleCameraRotation();
-            if (Input.GetKey(KeyCode.W)) {
-                transform.position += transform.forward * (Time.deltaTime * speedModifier);
-            } else if (Input.GetKey(KeyCode.S)) {
-                transform.position -= transform.forward * (Time.deltaTime * speedModifier);
+
+            float speedModifier = Input.GetKey(KeyCode.LeftShift) ? ModMultiplier : 1f;
+
+            if (Input.GetKey((KeyCode) CAMERA_CONTROLS.LOOK_AROUND_DRAG)) {
+                Vector3 diff = Input.mousePosition - g_LastMousePosition;
+                if (diff != Vector3.zero) {
+                    transform.Rotate(transform.right, -1 * diff.y * Time.deltaTime * RotationSpeed, Space.World);
+                    transform.Rotate(Vector3.up, diff.x * Time.deltaTime * RotationSpeed, Space.World);
+                }
             }
-            if (Input.GetKey(KeyCode.A)) {
-                transform.position -= transform.right * (Time.deltaTime * speedModifier);
-            } else if (Input.GetKey(KeyCode.D)) {
-                transform.position += transform.right * (Time.deltaTime * speedModifier);
+
+            if (Input.GetKey((KeyCode)CAMERA_CONTROLS.FORWARD)) {
+                transform.position += transform.forward * (Time.deltaTime * speedModifier) * Speed;
+            } else if (Input.GetKey((KeyCode)CAMERA_CONTROLS.BACKWARD)) {
+                transform.position -= transform.forward * (Time.deltaTime * speedModifier) * Speed;
             }
-            gMouseX = Input.mousePosition.x;
-            gMouseY = Input.mousePosition.y;
+
+            if (Input.GetKey((KeyCode)CAMERA_CONTROLS.RIGHT)) {
+                transform.position += transform.right * (Time.deltaTime * speedModifier) * Speed;
+            } else if (Input.GetKey((KeyCode)CAMERA_CONTROLS.LEFT)) {
+                transform.position -= transform.right * (Time.deltaTime * speedModifier) * Speed;
+            }
+
+
         }
 
         private void HandleIsometricCamera() {
-            float speedModifier = Input.GetKey(KeyCode.LeftShift) ? Speed * 2f : Speed;
+            float speedModifier = Input.GetKey(KeyCode.LeftShift) ? Speed * ModMultiplier : Speed * 1f;
             if (Input.GetKey(KeyCode.W)) {
-                Camera.position += Vector3.right * (Time.deltaTime * speedModifier);
+                transform.position += Vector3.right * (Time.deltaTime * speedModifier);
             } else if (Input.GetKey(KeyCode.S)) {
-                Camera.position -= Vector3.right * (Time.deltaTime * speedModifier);
+                if (transform.position.x > MinLimits.x)
+                    transform.position -= Vector3.right * (Time.deltaTime * speedModifier);
             }
             if (Input.GetKey(KeyCode.A)) {
-                Camera.position += Vector3.forward * (Time.deltaTime * speedModifier);
+                transform.position += Vector3.forward * (Time.deltaTime * speedModifier);
             } else if (Input.GetKey(KeyCode.D)) {
-                Camera.position -= Vector3.forward * (Time.deltaTime * speedModifier);
+                if(transform.position.z > MinLimits.z)
+                    transform.position -= Vector3.forward * (Time.deltaTime * speedModifier);
             }
 
             if(Input.GetAxis("Mouse ScrollWheel") > 0.0f) {
-                Camera.position -= Vector3.up * (0.08f * speedModifier);
+                if (transform.position.y > MinLimits.y)
+                    transform.position = Vector3.Lerp(transform.position, transform.position - Vector3.up, Time.deltaTime * ZoomSpeed * speedModifier);
             } else if (Input.GetAxis("Mouse ScrollWheel") < 0.0f) {
-                Camera.position += Vector3.up * (0.08f * speedModifier);
+                transform.position = Vector3.Lerp(transform.position, transform.position + Vector3.up, Time.deltaTime * ZoomSpeed * speedModifier);
             }
         }
 
@@ -190,44 +224,45 @@ namespace NPC {
             Vector3 pos;
             if (CloseUp) {
                 pos = Target.Body.Head.position;
-                pos += Target.transform.forward * -0.2f;
-                pos += Target.transform.right * 0.2f;
-                pos += Target.transform.up * 0.05f;
+                pos += Target.transform.forward * CloseUpDistances.z;
+                pos += Target.transform.right * CloseUpDistances.x;
+                pos += Target.transform.up * CloseUpDistances.y;
                 if (gPanning) {
                     float delta = Time.deltaTime * PanSmoothness;
-                    Camera.position = Vector3.Lerp(Camera.position, pos, delta);
+                    transform.position = Vector3.Lerp(transform.position, pos, delta);
                     gPanning = delta > 1f;
                 } else {
                     gPanning = false;
-                    Camera.position = pos;
+                    transform.position = pos;
                 }
-                Camera.LookAt(Target.Body.TargetObject);
+                transform.LookAt(Target.Body.TargetObject);
             } else {
-                Camera.rotation = Target.transform.rotation;
+                transform.rotation = Target.transform.rotation;
                 pos = Target.transform.position;
-                pos += Camera.up * 0.8f;
-                pos += Camera.forward * -0.6f;
-                pos += Camera.right * 0.2f;
-                Camera.position = pos;
-                Camera.RotateAround(Camera.position, Camera.right, 15f);
+                pos += transform.up * ThirdPersonDistances.y;
+                pos += transform.forward * ThirdPersonDistances.z;
+                pos += transform.right * ThirdPersonDistances.x;
+                transform.position = pos;
+                transform.RotateAround(transform.position, transform.right, 15f);
             }
         }
 
         private void SetFirstPersonView() {
-            Camera.position = Target.transform.position;
-            Camera.rotation = Target.transform.rotation;
-            Camera.position += Target.transform.forward * 0.1f;
-            Camera.position += Target.transform.up * 0.45f;
+            transform.position = Target.transform.position;
+            transform.rotation = Target.transform.rotation;
+            transform.position += Target.transform.forward * ThirdPersonDistances.z;
+            transform.position += Target.transform.up * ThirdPersonDistances.y;
         }
 
         private void SetIsometricView() {
-            Vector3 curPos = InitTarget == null ? Camera.position : InitTarget.position;
-            Camera.rotation = Quaternion.identity;
-            Camera.Rotate(Vector3.up, 90.0f);
-            Camera.Rotate(Vector3.right, 35.0f);
-            Camera.position = new Vector3(curPos.x, IsometricHeight, curPos.z);
-            Camera.position -= (Vector3.right * 4f);
+            Vector3 curPos = transform.position;
+            transform.rotation = Quaternion.identity;
+            transform.Rotate(Vector3.up, 90.0f);
+            transform.Rotate(Vector3.right, IsometricAngle);
+            transform.position = new Vector3(curPos.x, IsometricHeight, curPos.z);
+            transform.position -= (Vector3.right * 0.5f);
         }
+        #endregion
     }
 
 }

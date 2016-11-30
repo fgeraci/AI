@@ -10,7 +10,8 @@ namespace NPC {
     }
 
     public enum NPC_MODULE_TYPE {
-        PATHFINDER
+        PATHFINDER,
+        BEHAVIOR
     }
 
     // Anything which implements this interface might be a module of the NPC

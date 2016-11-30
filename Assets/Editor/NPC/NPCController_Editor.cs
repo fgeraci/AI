@@ -22,8 +22,17 @@ namespace NPC {
         private const string label_NavStoppingThresh = "Breaking Threshold";
         private const string label_AIPathfind = "Pathfinder";
         private const string label_NPCLoadedMods = "Loaded NPC Modules";
-        private const string label_DebugPrint = "Debug Prints";
+        private const string label_DebugPrint = "Debug Mode";
         private const string label_NavMeshAgentPathfinding = "Use NavMeshAgent";
+        private const string label_UseSocialForces = "Use Social Forces";
+        private const string label_AgentRepulsionWeight = "Agents Repulsion Weight";
+        private const string label_AgentRepulsionDistanceTolerance = "Agents Distance Tolerance";
+        private const string label_TestNPC = "Test NPC";
+        private const string label_IKFeetHeight = "IK Feet Height Correction";
+        private const string label_IKFeetForward = "IK Feet Forward Correction";
+        private const string label_IKFeetEffectorCorrector = "IK Feet Effector Height";
+        private const string label_IKUseHints = "Use IK Hints";
+        private const string label_IKFeetStairsInt = "IK Stairs Interpolation";
 
         [SerializeField]
         int selectedPathfinder;
@@ -66,8 +75,12 @@ namespace NPC {
             gGeneralSettings = EditorGUILayout.Foldout(gGeneralSettings, "General Settings");
             if(gGeneralSettings) { 
                 gController.MainAgent = (bool)EditorGUILayout.Toggle(label_MainAgent, (bool)gController.MainAgent);
-                gController.DebugPrint = (bool)EditorGUILayout.Toggle(label_DebugPrint, (bool)gController.DebugPrint);
+                gController.DebugMode = (bool)EditorGUILayout.Toggle(label_DebugPrint, (bool)gController.DebugMode);
                 gController.DisplaySelectedHighlight = (bool)EditorGUILayout.Toggle(label_SelectHighlight, (bool)gController.DisplaySelectedHighlight);
+                gController.TestNPC = (bool)EditorGUILayout.Toggle(label_TestNPC, (bool)gController.TestNPC);
+                if (gController.TestNPC) {
+                    gController.TestTargetLocation = (Transform)EditorGUILayout.ObjectField("Test Target Location", (Transform)gController.TestTargetLocation, typeof(Transform), true);
+                } else gController.TestTargetLocation = null;
             }
 
             /* Perception */
@@ -119,8 +132,20 @@ namespace NPC {
                 if(gController.Body.Navigation != NAV_STATE.DISABLED)
                     gController.Body.NavDistanceThreshold = (float) EditorGUILayout.FloatField(label_NavStoppingThresh, (float) gController.Body.NavDistanceThreshold);
                 gController.Body.IKEnabled = (bool)EditorGUILayout.Toggle(label_IKEnabled, (bool)gController.Body.IKEnabled);
+                if (gController.Body.IKEnabled) {
+                    gController.Body.IK_USE_HINTS = (bool)EditorGUILayout.Toggle(label_IKUseHints, (bool)gController.Body.IK_USE_HINTS);
+                    gController.Body.IK_FEET_HEIGHT_CORRECTION = (float)EditorGUILayout.Slider(label_IKFeetHeight, gController.Body.IK_FEET_HEIGHT_CORRECTION, 0f, 0.5f);
+                    gController.Body.IK_FEET_FORWARD_CORRECTION = (float)EditorGUILayout.Slider(label_IKFeetForward, gController.Body.IK_FEET_FORWARD_CORRECTION, -0.5f, 0.5f);
+                    gController.Body.IK_FEET_HEIGHT_EFFECTOR_CORRECTOR = (float)EditorGUILayout.Slider(label_IKFeetEffectorCorrector, gController.Body.IK_FEET_HEIGHT_EFFECTOR_CORRECTOR, 0f, 0.3f);
+                    gController.Body.IK_FEET_STAIRS_INTERPOLATION = (float)EditorGUILayout.Slider(label_IKFeetStairsInt, gController.Body.IK_FEET_STAIRS_INTERPOLATION, 0f, 20f);
+                }
                 gController.Body.UseAnimatorController = (bool)EditorGUILayout.Toggle(label_AnimatorEnabled, (bool)gController.Body.UseAnimatorController);
                 gController.Body.UseCurves = (bool)EditorGUILayout.Toggle(label_UseAnimCurves, (bool)gController.Body.UseCurves);
+                gController.Body.EnableSocialForces = (bool)EditorGUILayout.Toggle(label_UseSocialForces, (bool)gController.Body.EnableSocialForces);
+                if(gController.Body.EnableSocialForces) {
+                    gController.Body.AgentRepulsionWeight = (float)EditorGUILayout.FloatField(label_AgentRepulsionWeight, (float) gController.Body.AgentRepulsionWeight);
+                    gController.Body.DistanceTolerance = (float)EditorGUILayout.FloatField(label_AgentRepulsionDistanceTolerance, (float)gController.Body.DistanceTolerance);
+                }
             }
 
             if (EditorGUI.EndChangeCheck()) {
@@ -132,14 +157,15 @@ namespace NPC {
         private void OnSceneGUI() {
             if(gController != null) {
                 if(gShowPerception) {
+
                     Transform t = gController.Perception.PerceptionField.transform;
             
                     /* Draw View Angle */
                     float angleSplit = gController.Perception.ViewAngle / 2;
                     Debug.DrawRay(t.position,
-                        Quaternion.AngleAxis(angleSplit, Vector3.up) * t.rotation * Vector3.forward * gController.Perception.PerceptionRadius, Color.red);
+                        Quaternion.AngleAxis(angleSplit, Vector3.up) * t.rotation * Vector3.forward * gController.Perception.PerceptionRadius * t.lossyScale.z, Color.red);
                     Debug.DrawRay(t.position, 
-                        Quaternion.AngleAxis((-1) * angleSplit, Vector3.up) * t.rotation * Vector3.forward * gController.Perception.PerceptionRadius, Color.red);
+                        Quaternion.AngleAxis((-1) * angleSplit, Vector3.up) * t.rotation * Vector3.forward * gController.Perception.PerceptionRadius * t.lossyScale.z, Color.red);
                 }
             }
         }

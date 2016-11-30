@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Reflection;
 using Pathfinding;
 
-
 namespace NPC {
     
     public class NPCAI: MonoBehaviour {
