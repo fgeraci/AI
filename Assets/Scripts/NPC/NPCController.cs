@@ -110,6 +110,8 @@ namespace NPC {
         }
 
         public void LoadNPCModules() {
+            if(g_NPCModules == null)
+                g_NPCModules = new Dictionary<string, INPCModule>();
             INPCModule[] modules = gameObject.GetComponents<INPCModule>();
             foreach (INPCModule m in modules) {
                 if (!ContainsModule(m)) {
@@ -187,8 +189,16 @@ namespace NPC {
         }
 	
         void FixedUpdate() {
+
             gPerception.UpdatePerception();
             gBody.UpdateBody();
+
+            // Main NPC Modular updating call
+            foreach(INPCModule m in g_NPCModules.Values) {
+                if (m.IsUpdateable()) {
+                    m.TickModule();
+                }
+            }
         }
         
 	    void Update () {

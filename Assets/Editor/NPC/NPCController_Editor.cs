@@ -65,8 +65,12 @@ namespace NPC {
                 if (gShowMods) {
                     gController.LoadNPCModules();
                     INPCModule[] mods = gController.NPCModules;
+                    GUILayoutOption[] ops = new GUILayoutOption[1];
                     foreach(INPCModule m in mods) {
+                        EditorGUILayout.BeginHorizontal();
                         EditorGUILayout.LabelField(m.NPCModuleName());
+                        m.SetEnable((bool)EditorGUILayout.Toggle((bool) m.IsEnabled()));
+                        EditorGUILayout.EndHorizontal();
                     }
                 }
             } else EditorGUILayout.LabelField("No NPC Modules Loaded");

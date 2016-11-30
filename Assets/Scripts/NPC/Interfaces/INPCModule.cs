@@ -11,11 +11,16 @@ namespace NPC {
 
     public enum NPC_MODULE_TYPE {
         PATHFINDER,
-        BEHAVIOR
+        BEHAVIOR,
+        EXPLORATION
     }
 
     // Anything which implements this interface might be a module of the NPC
     public interface INPCModule {
+
+        bool IsUpdateable();
+
+        void TickModule();
 
         bool IsEnabled();
 

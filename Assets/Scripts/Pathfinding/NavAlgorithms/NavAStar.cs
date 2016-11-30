@@ -411,6 +411,14 @@ public class NavAStar : MonoBehaviour, IPathfinder, INPCModule {
         if (g_ClosedList != null) g_ClosedList.Clear(); 
     }
 
+    public bool IsUpdateable() {
+        return false;
+    }
+
+    public void TickModule() {
+        throw new NotImplementedException();
+    }
+
     #endregion
 
 }

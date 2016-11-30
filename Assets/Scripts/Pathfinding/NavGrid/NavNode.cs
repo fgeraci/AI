@@ -49,6 +49,21 @@ namespace Pathfinding {
 
         #region Properties
 
+        public string TileText {
+            get {
+                return g_TileText.GetComponent<TextMesh>().text;
+            }
+            set {
+                g_TileText.GetComponent<TextMesh>().text = value;
+            }
+        }
+
+        public int TileTextSize {
+            set {
+                g_TileText.GetComponent<TextMesh>().fontSize = value;
+            }
+        }
+
         public int HighwayId;
         
         public NODE_TYPE NodeType {
@@ -61,6 +76,8 @@ namespace Pathfinding {
         }
 
         public bool Available;
+
+        public Transform OnTop;
 
         public float Radius {
             get { return g_Radius; }
@@ -194,8 +211,12 @@ destroy_tile:
                           Physics.Raycast(Position + new Vector3(0, 0, -Radius), Up, g_BlockingHeight));
                 if(hit.collider) {
                     IPathfinder[] finder = hit.collider.GetComponents<IPathfinder>();
-                    foreach(IPathfinder ipf in finder) {
-                        g_Grid.AddIPathfinderNode(ipf, this);
+                    if(finder.Length > 0) {
+                        foreach (IPathfinder ipf in finder) {
+                            g_Grid.AddIPathfinderNode(ipf, this);
+                        }
+                    } else {
+                        OnTop = hit.collider.transform;
                     }
                 }
                 return Available;
@@ -248,7 +269,7 @@ destroy_tile:
             tm.characterSize = 0.2f;
             tm.anchor = TextAnchor.UpperCenter;
             g_TileText.transform.parent = g_Tile.transform;
-            tm.text = "Weight: " + DisplayWeight;
+            tm.text = "Value: " + DisplayWeight;
         }
         
         #endregion

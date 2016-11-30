@@ -537,6 +537,14 @@ public class NavIncAStar : MonoBehaviour, IPathfinder, INPCModule {
         return g_Name;
     }
 
+    public bool IsUpdateable() {
+        return false;
+    }
+
+    public void TickModule() {
+        throw new NotImplementedException();
+    }
+
     #endregion
 
     #region Subclasses

@@ -98,5 +98,13 @@ public class NPCBehavior : MonoBehaviour, INPCModule {
         Enabled = e;
     }
 
+    public bool IsUpdateable() {
+        return false;
+    }
+
+    public void TickModule() {
+        throw new NotImplementedException();
+    }
+
     #endregion
 }

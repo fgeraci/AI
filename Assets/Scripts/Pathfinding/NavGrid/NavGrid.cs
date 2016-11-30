@@ -28,6 +28,13 @@ namespace Pathfinding {
     public class NavGrid : MonoBehaviour {
 
         #region Properties
+
+        public int NodesCount {
+            get {
+                return g_Grid.Length;
+            }
+        }
+
         #endregion
 
         #region Members
@@ -63,6 +70,7 @@ namespace Pathfinding {
         public float        MediumWeight = (float)      NavNode.NODE_TYPE.HARD_TO_WALK;
         public float        NotAvailableWeight = (float)NavNode.NODE_TYPE.NONWALKABLE;
         private NavNode     g_SelectedTile;
+        private int         g_BlockedNodes;
         public float        SelectedTileWeight = 1;
         public Vector2      SelectedTile;
         #endregion
@@ -111,6 +119,7 @@ namespace Pathfinding {
                     AddBlockerOnScene = false;
                 }
             }
+            g_BlockedNodes = blocked;
         }
 
         private void RandomizeBlockers(int blockers) {
@@ -514,6 +523,23 @@ restart_highways:
 
         #region Public_Functions
         
+        public int GetTotalBlockedTiles() {
+            return g_BlockedNodes;
+        }
+
+        public IEnumerable<NavNode> NodesList() {
+            foreach(NavNode n in g_Grid) {
+                yield return n;
+            }
+        }
+
+        public NavNode GetRandomNode() {
+
+            return g_Grid[
+                (int)(UnityEngine.Random.Range(0,g_Grid.GetLength(0)-1)),
+                (int)(UnityEngine.Random.Range(0, g_Grid.GetLength(1) - 1))];
+        }
+
         public void WritePathToFile(List<NavNode> nodes) {
             if(WriteGridToFile) {
                 if(File.Exists(FileName)) {
@@ -539,6 +565,14 @@ restart_highways:
                 g_WalkedOnNodes.Add(ipf, node);
                 if (Application.isPlaying) node.SetHighlightTile(true, Color.red, 0.5f);
             }
+        }
+
+        public NavNode FindOccupiedNode(Transform t) {
+            foreach(NavNode n in g_Grid) {
+                if (n.OnTop != null && n.OnTop == t)
+                    return n;
+            }
+            return null;
         }
 
         public NavNode GetOccupiedNode(IPathfinder ipf) {
