@@ -269,7 +269,7 @@ destroy_tile:
             tm.characterSize = 0.2f;
             tm.anchor = TextAnchor.UpperCenter;
             g_TileText.transform.parent = g_Tile.transform;
-            tm.text = "Value: " + DisplayWeight;
+            tm.text = DisplayWeight;
         }
         
         #endregion

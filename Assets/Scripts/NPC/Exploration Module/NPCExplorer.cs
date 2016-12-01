@@ -13,7 +13,8 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
         UP,
         DOWN,
         RIGHT,
-        LEFT
+        LEFT,
+        STAY
     }
 
     #endregion
@@ -27,9 +28,10 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     private NPCController g_NPCController;
     private int g_TotalNodesCount;
     private Dictionary<NavNode.NODE_TYPE, List<NavNodeData>> g_NodeTypes;
+    private int g_ViterbiRoundCount;
 
     private NavNode.NODE_TYPE g_LastReadType;
-    private MOVE_POLICY g_LastMovePolicy;
+    private MOVE_POLICY g_LastMovePolicy = MOVE_POLICY.STAY;
     private NavNode g_LastAgentNode;
 
     /// <summary>
@@ -37,9 +39,15 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     /// </summary>
     [SerializeField]
     public bool ForceInitialStateReading = false;
-    
+
+    [SerializeField]
+    public bool PrintViterbiPath = false;
+
     [SerializeField]
     public bool AnimatedExploration = false;
+
+    [SerializeField]
+    public int DecimalPrecision = 5;
 
     [SerializeField]
     public bool RandomizeStart = false;
@@ -52,6 +60,9 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
 
     [SerializeField]
     public float SensorSuccess = 0.9f;
+
+    [SerializeField]
+    public bool PauseExecution = false;
 
     private Dictionary<NavNode, NavNodeData> g_NodeValues;
     private NavGrid g_Grid;
@@ -115,10 +126,10 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
             NavNodeData nd = new NavNodeData();
             nd.Node = n;
             if(n.IsWalkable() || agentNode == n) {
-                nd.Probability = 1f / freeTiles;
+                nd.Probability = nd.ViterbiProbability = 1f / freeTiles;
                 nd.MovePolicy = MOVE_POLICY.UP;
             } else {
-                nd.Probability = 0f;
+                nd.Probability = nd.ViterbiProbability = 0f;
             }
             g_NodeValues.Add(n, nd);
             switch(n.NodeType) {
@@ -135,6 +146,7 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
                     n.SetHighlightTile(true, Color.red, 0.8f);
                     break;
             }
+            nd.NodeType = n.NodeType;
             g_NPCController.Debug("Discovered new Node " + nd);
             g_NodeTypes[n.NodeType].Add(nd);
         }
@@ -181,7 +193,7 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     public void TickModule() {
         if(Enabled) { 
             if(Tick()) {
-
+                g_ViterbiRoundCount++;
                 g_NPCController.Debug("Updating NPC Module: " + NPCModuleName());
 
                 if (g_TestPolicies.Count > 0) {
@@ -192,7 +204,10 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
                 } else {
                     g_NPCController.Debug("NPCExplorer -> Finished execution test!");
                     Enabled = false;
+                    g_ViterbiRoundCount = 0;
                 }
+
+                g_LastReadType = Sense(g_LastAgentNode, g_NodeValues[g_LastAgentNode]);
 
                 UpdateNodes(g_LastAgentNode);
 
@@ -204,8 +219,6 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
                         transform.position = g_LastAgentNode.Position;
                     }
                 }
-                
-                // sense after we move - first time is unknown
             }
         }
     }
@@ -219,16 +232,137 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     /// <param name="n"></param>
     private void UpdateNodes(NavNode n) {
         NavNodeData nd = g_NodeValues[n];
-        // TODO - P(E|X) * SUM(P(X | X-1) P(E | E-1))
-        nd.MovePolicy = MOVE_POLICY.UP;
-        // List<NavNode.NODE_TYPE> nodes = Sense(n, nd);
-        foreach(List<NavNodeData> l in g_NodeTypes.Values) {
+        Dictionary<NavNode, NavNodeData> updatedNodes = new Dictionary<NavNode, NavNodeData>();
+        float alpha = 0, viterbiAlpha = 0f; ;    
+        int validTiles = (Enum.GetValues(typeof(NavNode.NODE_TYPE)).Length - 2);
+        // P(E|X) * SUM(P(X | X-1) P(E | E-1))
+        foreach (List<NavNodeData> l in g_NodeTypes.Values) {
+            // for each node
             foreach(NavNodeData d in l) {
-                d.Node.TileText = d.Probability.ToString();
+
+                updatedNodes.Add(d.Node, new NavNodeData());
+
+                float sense,                                //  P(E|E-1)
+                    sum = 0f,                               //  P(X|X-1)
+                    PreviousBelief = d.Probability,         //  P(E|X-1)
+                    
+                    maxSum = 
+                    (1f - SuccessRate) * PreviousBelief,    //  Viterbi - assume minimums first
+                    maxTrans = (1f - SuccessRate),          //  argmax(P(X|X-1)
+                    maxPrevBel = PreviousBelief;            //  argmax(P(E|X-1)
+
+                // 0.9 Success, 0.05 on sensing some wrong other type
+                if(d.NodeType == NavNode.NODE_TYPE.NONWALKABLE) {
+
+                    d.Probability = 0;
+
+                } else {
+
+                    // determine sensor noise
+                    if (d.NodeType == g_LastReadType) {
+                        sense = SensorSuccess;
+                    } else
+                        // dont count self and blocked
+                        sense = (1f - SensorSuccess) / validTiles;
+                    
+                    // where I am coming from
+                    switch(g_LastMovePolicy) {
+
+                        case MOVE_POLICY.UP:
+
+                            // there is always the chance of staying in place
+                            sum += (1f - SuccessRate) * PreviousBelief;
+                            
+                            if (GetNextNode(d.Node, MOVE_POLICY.UP) == null) {
+                                // 90% chances of staying in this cell if blocked / unavailable
+                                sum += SuccessRate * PreviousBelief;
+                            }
+
+                            NavNode nextNode = GetNextNode(d.Node, MOVE_POLICY.DOWN);
+                            if (nextNode != null) {
+                                float prevProb = g_NodeValues[nextNode].Probability;
+                                // we came from the one before successfully
+                                sum += (SuccessRate * prevProb);
+                            }
+
+                            break;
+
+                        case MOVE_POLICY.DOWN:
+
+                            // there is always the chance of staying in place
+                            sum += (1f - SuccessRate) * PreviousBelief;
+
+                            if (GetNextNode(d.Node, MOVE_POLICY.DOWN) == null) {
+                                // 90% chances of staying in this cell if blocked / unavailable
+                                sum += SuccessRate * PreviousBelief;
+                            }
+                            nextNode = GetNextNode(d.Node, MOVE_POLICY.UP);
+                            if (nextNode != null) {
+                                float prevProb = g_NodeValues[nextNode].Probability;
+                                // we came from the one before successfully
+                                sum += (SuccessRate * prevProb);
+                            }
+
+                            break;
+
+                        case MOVE_POLICY.LEFT:
+
+                            // there is always the chance of staying in place
+                            sum += (1f - SuccessRate) * PreviousBelief;
+
+                            if (GetNextNode(d.Node, MOVE_POLICY.LEFT) == null) {
+                                // 90% chances of staying in this cell if blocked / unavailable
+                                sum += SuccessRate * PreviousBelief;
+                            }
+                            nextNode = GetNextNode(d.Node, MOVE_POLICY.RIGHT);
+                            if (nextNode != null) {
+                                float prevProb = g_NodeValues[nextNode].Probability;
+                                // we came from the one before successfully
+                                sum += (SuccessRate * prevProb);
+                            }
+
+                            break;
+
+                        case MOVE_POLICY.RIGHT:
+                            
+                            // there is always the chance of staying in place
+                            sum += (1f - SuccessRate) * PreviousBelief;
+
+                            if (GetNextNode(d.Node, MOVE_POLICY.RIGHT) == null) {
+                                // 90% chances of staying in this cell if blocked / unavailable
+                                sum += SuccessRate * PreviousBelief;
+                            }
+
+                            nextNode = GetNextNode(d.Node, MOVE_POLICY.LEFT);
+                            if (nextNode != null) {
+                                float prevProb = g_NodeValues[nextNode].Probability;
+                                // we came from the one before successfully
+                                sum += (SuccessRate * prevProb);
+                            }
+
+                            break;
+                    }
+
+                    // do not update the nodes until the round is over
+                    updatedNodes[d.Node].Probability = sense * sum;
+                    alpha += updatedNodes[d.Node].Probability;
+
+                }
             }
         }
-        g_NodeValues.Remove(n);
-        g_NodeValues.Add(n, nd);
+
+        
+        // normalize
+        int decimals = (int) Math.Pow(10, DecimalPrecision);
+        NavNodeData maxNode = nd;
+        foreach (List<NavNodeData> l in g_NodeTypes.Values) {
+            foreach (NavNodeData d in l) {
+                d.Probability = updatedNodes[d.Node].Probability;
+                d.Probability /= alpha;
+                d.Node.TileText = 
+                    ((float)Math.Round((d.Probability) * decimals) / decimals).ToString();
+            }
+        }
     }
 
     /// <summary>
@@ -260,7 +394,12 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
         return n;
     }
 
-    private List<NavNode.NODE_TYPE> Sense(NavNode n, NavNodeData nd) {
+    private NavNode.NODE_TYPE Sense(NavNode n, NavNodeData nd) {
+        if(g_TestReadings.Count > 0) {
+            NavNode.NODE_TYPE t = g_TestReadings[0];
+            g_TestReadings.Remove(t);
+            return t;
+        }
         List<NavNode.NODE_TYPE> nodes = new List<NavNode.NODE_TYPE>();
         double p = (new System.Random()).NextDouble();
         NavNode.NODE_TYPE trueType = n.NodeType;
@@ -269,20 +408,19 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
         if (p <= 1f - SensorSuccess) {
             foreach (NavNode.NODE_TYPE nt in l) {
                 if (nt == trueType) continue;
-                nodes.Add(nt);
-                threshold += threshold;
+                return nt;
             }
         } else {
             nd.NodeType = trueType;
         }
-        return nodes;
+        return NavNode.NODE_TYPE.NONWALKABLE;
     }
 
     private bool Tick() {
         if(g_Stopwatch.ElapsedMilliseconds > g_UpdateCycle) {
             g_Stopwatch.Reset();
             g_Stopwatch.Start();
-            return true;
+            return !PauseExecution;
         }
         return false;
     }
@@ -291,16 +429,9 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
 
     #region Support_Classes
     class NavNodeData {
-        private float g_Probability;
         public NavNode Node;
-        public float Probability {
-            get {
-                return (float)(Math.Round(g_Probability * 1000) / 1000f);
-            }
-            set {
-                g_Probability = value;
-            }
-        }
+        public float Probability;
+        public float ViterbiProbability;
         public MOVE_POLICY MovePolicy;
         public NavNode.NODE_TYPE NodeType;
         public override string ToString() {
