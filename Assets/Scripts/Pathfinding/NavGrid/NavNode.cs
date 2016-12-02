@@ -58,6 +58,12 @@ namespace Pathfinding {
             }
         }
 
+        public Color TileColor {
+            set {
+                g_TileText.GetComponent<TextMesh>().color = value;
+            }
+        }
+
         public int TileTextSize {
             set {
                 g_TileText.GetComponent<TextMesh>().fontSize = value;

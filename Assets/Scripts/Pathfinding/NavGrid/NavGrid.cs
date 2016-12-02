@@ -602,6 +602,16 @@ restart_highways:
             return null;
         }
 
+        public NavNode PickRandomNode() {
+            NavNode n = null;
+            do {
+                int x = Mathf.RoundToInt(UnityEngine.Random.Range(0, GridDimensions.x - 1)),
+                            y = Mathf.RoundToInt(UnityEngine.Random.Range(0, GridDimensions.y - 1));
+                n = GetGridNode(x, y);
+            } while (n == null);
+            return n;
+        }
+
         /// <summary>
         /// Returns all exisitng neighbors
         /// </summary>

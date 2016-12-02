@@ -28,11 +28,12 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     private NPCController g_NPCController;
     private int g_TotalNodesCount;
     private Dictionary<NavNode.NODE_TYPE, List<NavNodeData>> g_NodeTypes;
-    private int g_ViterbiRoundCount;
-
+    private int g_ExploringRoundCount;
+    private GroundTruthData g_GroundTruthData;
     private NavNode.NODE_TYPE g_LastReadType;
     private MOVE_POLICY g_LastMovePolicy = MOVE_POLICY.STAY;
     private NavNode g_LastAgentNode;
+    private List<NavNodeData> g_ViterbiPath;
 
     /// <summary>
     /// g_TestReadings must be populated
@@ -42,6 +43,12 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
 
     [SerializeField]
     public bool PrintViterbiPath = false;
+
+    [SerializeField]
+    public bool GenerateGroundTruthData = false;
+
+    [SerializeField]
+    public int RandomStateValues = 100;
 
     [SerializeField]
     public bool AnimatedExploration = false;
@@ -74,7 +81,8 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     #region Unity_Methods
     // Use this for initialization
     void Start () {
-
+        RandomizeStart = !RandomizeStart ? 
+            GenerateGroundTruthData : RandomizeStart;
         /* providing hard coded readings for testing */
         g_TestReadings = new List<NavNode.NODE_TYPE>();
         g_TestReadings.Add(NavNode.NODE_TYPE.WALKABLE);
@@ -90,7 +98,7 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
         /* ---------------------------------------- */
 
         // we move first
-        if(ForceInitialStateReading) {
+        if (ForceInitialStateReading) {
             g_LastMovePolicy = g_TestPolicies[0];
             g_TestPolicies.Remove(0);
             AnimatedExploration = false;
@@ -150,6 +158,12 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
             g_NPCController.Debug("Discovered new Node " + nd);
             g_NodeTypes[n.NodeType].Add(nd);
         }
+
+        if (GenerateGroundTruthData)
+            GenerateGroundTruth();
+
+        g_ViterbiPath = new List<NavNodeData>();
+        g_NPCController.Debug(g_TestPolicies.ToString());
         g_NPCController.Debug("NPCExplorer initialized");
     }
 	
@@ -193,31 +207,37 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     public void TickModule() {
         if(Enabled) { 
             if(Tick()) {
-                g_ViterbiRoundCount++;
+                
                 g_NPCController.Debug("Updating NPC Module: " + NPCModuleName());
 
                 if (g_TestPolicies.Count > 0) {
+
                     g_LastMovePolicy = g_TestPolicies[0];
                     g_TestPolicies.Remove(g_LastMovePolicy);
                     NavNode t = GetNextNode(g_LastAgentNode, g_LastMovePolicy);
                     g_LastAgentNode = t == null ? g_LastAgentNode : t;
+
+                    g_LastReadType = Sense(g_LastAgentNode, g_NodeValues[g_LastAgentNode]);
+
+                    UpdateNodes(g_LastAgentNode);
+
+                    if (g_LastAgentNode != null) {
+                        if (AnimatedExploration && !g_NPCController.Body.Navigating) {
+                            // go to
+                        } else {
+                            g_NPCController.OrientTowards((g_LastAgentNode.Position - transform.position).normalized);
+                            transform.position = g_LastAgentNode.Position;
+                        }
+                    }
+                    if(GenerateGroundTruthData)
+                        g_NPCController.Debug(g_GroundTruthData.GetGroundTruth(g_ExploringRoundCount).ToString());
+                    g_ExploringRoundCount++;
+
                 } else {
                     g_NPCController.Debug("NPCExplorer -> Finished execution test!");
                     Enabled = false;
-                    g_ViterbiRoundCount = 0;
-                }
-
-                g_LastReadType = Sense(g_LastAgentNode, g_NodeValues[g_LastAgentNode]);
-
-                UpdateNodes(g_LastAgentNode);
-
-                if (g_LastAgentNode != null) {
-                    if (AnimatedExploration && !g_NPCController.Body.Navigating) {
-                        // go to
-                    } else {
-                        g_NPCController.OrientTowards((g_LastAgentNode.Position - transform.position).normalized);
-                        transform.position = g_LastAgentNode.Position;
-                    }
+                    g_ExploringRoundCount = 0;
+                    g_ViterbiPath.Clear();
                 }
             }
         }
@@ -233,7 +253,7 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     private void UpdateNodes(NavNode n) {
         NavNodeData nd = g_NodeValues[n];
         Dictionary<NavNode, NavNodeData> updatedNodes = new Dictionary<NavNode, NavNodeData>();
-        float alpha = 0, viterbiAlpha = 0f; ;    
+        float alpha = 0, viterbiAlpha = 0f;   
         int validTiles = (Enum.GetValues(typeof(NavNode.NODE_TYPE)).Length - 2);
         // P(E|X) * SUM(P(X | X-1) P(E | E-1))
         foreach (List<NavNodeData> l in g_NodeTypes.Values) {
@@ -244,12 +264,10 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
 
                 float sense,                                //  P(E|E-1)
                     sum = 0f,                               //  P(X|X-1)
-                    PreviousBelief = d.Probability,         //  P(E|X-1)
-                    
-                    maxSum = 
-                    (1f - SuccessRate) * PreviousBelief,    //  Viterbi - assume minimums first
-                    maxTrans = (1f - SuccessRate),          //  argmax(P(X|X-1)
-                    maxPrevBel = PreviousBelief;            //  argmax(P(E|X-1)
+                    PreviousBelief = PrintViterbiPath ?     //  P(E|X-1)
+                    d.ViterbiProbability : d.Probability,         
+                    maxSum =                                // argmax(Tr * Pb)
+                    (1f - SuccessRate) * PreviousBelief;
 
                 // 0.9 Success, 0.05 on sensing some wrong other type
                 if(d.NodeType == NavNode.NODE_TYPE.NONWALKABLE) {
@@ -264,7 +282,11 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
                     } else
                         // dont count self and blocked
                         sense = (1f - SensorSuccess) / validTiles;
-                    
+
+                    // Update Ground Truth Data
+                    if(GenerateGroundTruthData)
+                        g_GroundTruthData.SetGroudnTruth(g_LastMovePolicy, g_LastReadType, sense, n, g_ExploringRoundCount);
+
                     // where I am coming from
                     switch(g_LastMovePolicy) {
 
@@ -275,13 +297,16 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
                             
                             if (GetNextNode(d.Node, MOVE_POLICY.UP) == null) {
                                 // 90% chances of staying in this cell if blocked / unavailable
+                                maxSum += SuccessRate * PreviousBelief; // for Viterbi
                                 sum += SuccessRate * PreviousBelief;
+
                             }
 
                             NavNode nextNode = GetNextNode(d.Node, MOVE_POLICY.DOWN);
                             if (nextNode != null) {
-                                float prevProb = g_NodeValues[nextNode].Probability;
+                                float prevProb = PrintViterbiPath ? g_NodeValues[nextNode].ViterbiProbability : g_NodeValues[nextNode].Probability;
                                 // we came from the one before successfully
+                                maxSum = Math.Max(maxSum, (SuccessRate * prevProb));
                                 sum += (SuccessRate * prevProb);
                             }
 
@@ -294,12 +319,14 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
 
                             if (GetNextNode(d.Node, MOVE_POLICY.DOWN) == null) {
                                 // 90% chances of staying in this cell if blocked / unavailable
+                                maxSum += SuccessRate * PreviousBelief; // for Viterbi
                                 sum += SuccessRate * PreviousBelief;
                             }
                             nextNode = GetNextNode(d.Node, MOVE_POLICY.UP);
                             if (nextNode != null) {
-                                float prevProb = g_NodeValues[nextNode].Probability;
+                                float prevProb = PrintViterbiPath ? g_NodeValues[nextNode].ViterbiProbability : g_NodeValues[nextNode].Probability;
                                 // we came from the one before successfully
+                                maxSum = Math.Max(maxSum, (SuccessRate * prevProb));
                                 sum += (SuccessRate * prevProb);
                             }
 
@@ -312,12 +339,14 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
 
                             if (GetNextNode(d.Node, MOVE_POLICY.LEFT) == null) {
                                 // 90% chances of staying in this cell if blocked / unavailable
+                                maxSum += SuccessRate * PreviousBelief; // for Viterbi
                                 sum += SuccessRate * PreviousBelief;
                             }
                             nextNode = GetNextNode(d.Node, MOVE_POLICY.RIGHT);
                             if (nextNode != null) {
-                                float prevProb = g_NodeValues[nextNode].Probability;
+                                float prevProb = PrintViterbiPath ? g_NodeValues[nextNode].ViterbiProbability : g_NodeValues[nextNode].Probability;
                                 // we came from the one before successfully
+                                maxSum = Math.Max(maxSum, (SuccessRate * prevProb));
                                 sum += (SuccessRate * prevProb);
                             }
 
@@ -330,13 +359,15 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
 
                             if (GetNextNode(d.Node, MOVE_POLICY.RIGHT) == null) {
                                 // 90% chances of staying in this cell if blocked / unavailable
+                                maxSum += SuccessRate * PreviousBelief; // for Viterbi
                                 sum += SuccessRate * PreviousBelief;
                             }
 
                             nextNode = GetNextNode(d.Node, MOVE_POLICY.LEFT);
                             if (nextNode != null) {
-                                float prevProb = g_NodeValues[nextNode].Probability;
+                                float prevProb = PrintViterbiPath ? g_NodeValues[nextNode].ViterbiProbability : g_NodeValues[nextNode].Probability;
                                 // we came from the one before successfully
+                                maxSum = Math.Max(maxSum, (SuccessRate * prevProb));
                                 sum += (SuccessRate * prevProb);
                             }
 
@@ -344,7 +375,10 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
                     }
 
                     // do not update the nodes until the round is over
+                    updatedNodes[d.Node].ViterbiProbability = sense * maxSum;
                     updatedNodes[d.Node].Probability = sense * sum;
+                    // compute alphas
+                    viterbiAlpha += updatedNodes[d.Node].ViterbiProbability;
                     alpha += updatedNodes[d.Node].Probability;
 
                 }
@@ -357,11 +391,21 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
         NavNodeData maxNode = nd;
         foreach (List<NavNodeData> l in g_NodeTypes.Values) {
             foreach (NavNodeData d in l) {
+                d.Node.TileColor = Color.green;
+                d.ViterbiProbability = updatedNodes[d.Node].ViterbiProbability;
+                d.ViterbiProbability /= viterbiAlpha;
+                maxNode = d.ViterbiProbability > maxNode.ViterbiProbability ? d : maxNode;
                 d.Probability = updatedNodes[d.Node].Probability;
                 d.Probability /= alpha;
-                d.Node.TileText = 
+                d.Node.TileText = PrintViterbiPath ?
+                    ((float)Math.Round((d.ViterbiProbability) * decimals) / decimals).ToString() :
                     ((float)Math.Round((d.Probability) * decimals) / decimals).ToString();
             }
+        }
+        g_ViterbiPath.Add(maxNode);
+        if (PrintViterbiPath) {
+            maxNode.Node.TileColor = Color.red;
+            maxNode.Node.TileText = "Node " + g_ExploringRoundCount + "\n" + maxNode.Node.TileText;
         }
     }
 
@@ -400,18 +444,22 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
             g_TestReadings.Remove(t);
             return t;
         }
+        System.Random random = new System.Random();
         List<NavNode.NODE_TYPE> nodes = new List<NavNode.NODE_TYPE>();
-        double p = (new System.Random()).NextDouble();
+        double p = random.NextDouble();
         NavNode.NODE_TYPE trueType = n.NodeType;
         Array l = Enum.GetValues(typeof(NavNode.NODE_TYPE));
-        float threshold = 1f / (l.Length - 1);
-        if (p <= 1f - SensorSuccess) {
+        if (p > SensorSuccess) {
+            float rP = 1f / (l.Length - 2);
+            p = random.NextDouble();
             foreach (NavNode.NODE_TYPE nt in l) {
                 if (nt == trueType) continue;
-                return nt;
+                if (p > rP) {
+                    return nt;
+                } else p += p; 
             }
         } else {
-            nd.NodeType = trueType;
+            return trueType;
         }
         return NavNode.NODE_TYPE.NONWALKABLE;
     }
@@ -424,10 +472,71 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
         }
         return false;
     }
+
+    private void GenerateGroundTruth() {
+        NavNode from = g_Grid.PickRandomNode();
+        g_TestReadings.Clear();
+        g_TestPolicies.Clear();
+        g_GroundTruthData = new GroundTruthData(RandomStateValues);
+        g_GroundTruthData.InitialNode = from;
+        System.Random random = new System.Random();
+        int arrayLenght = Enum.GetValues(typeof(MOVE_POLICY)).Length;
+        MOVE_POLICY[] policies = (MOVE_POLICY[])Enum.GetValues(typeof(MOVE_POLICY));
+        for (int i = 0; i < RandomStateValues; ++i) {
+            // generate random policy i
+            int rand = random.Next(0, arrayLenght-1);
+            MOVE_POLICY randomPolicy = policies[rand];
+            g_TestPolicies.Add(randomPolicy);
+        }
+    }
+
     #endregion
 
 
     #region Support_Classes
+    class GroundTruthData {
+
+        public NavNode InitialNode;
+        NavNode[] ActualNode;
+        MOVE_POLICY[] Policies;
+        NavNode.NODE_TYPE[] Readings;
+        float[] Transitions;
+
+        public GroundTruthData(int size) {
+            ActualNode = new NavNode[size];
+            Policies = new MOVE_POLICY[size];
+            Readings = new NavNode.NODE_TYPE[size];
+            Transitions = new float[size];
+        }
+
+        public GroundTruth GetGroundTruth(int index) {
+            GroundTruth gt = new GroundTruth();
+            gt.Policy = Policies[index];
+            gt.Read = Readings[index];
+            gt.Transition = Transitions[index];
+            gt.Node = ActualNode[index];
+            return gt;
+        }
+
+        public void SetGroudnTruth(MOVE_POLICY p, NavNode.NODE_TYPE type, float t, NavNode n, int index) {
+            Policies[index] = p;
+            Readings[index] = type;
+            Transitions[index] = t;
+            ActualNode[index] = n;
+        }
+
+        public class GroundTruth {
+            public NavNode Node;
+            public MOVE_POLICY Policy;
+            public NavNode.NODE_TYPE Read;
+            public float Transition;
+            public float Observations;
+            public override string ToString() {
+                return "POLICY: " + Policy + " SENSED: " + Read + " TrMod: " + Transition + " ActualNode: " + Node + " ActualType: " + Node.NodeType;
+            }
+        }
+    }
+
     class NavNodeData {
         public NavNode Node;
         public float Probability;
