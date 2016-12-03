@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using NPC;
+using System.IO;
 using Pathfinding;
 using System;
 
@@ -20,6 +21,7 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     #endregion
 
     #region Members
+    private static char letterA = 'A';
     private List<NavNode.NODE_TYPE> g_TestReadings;
     private List<MOVE_POLICY> g_TestPolicies;
     public float UpdateInSeconds = 1;
@@ -39,8 +41,23 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     /// g_TestReadings must be populated
     /// </summary>
     [SerializeField]
+    public string FileName;
+
+    [SerializeField]
     public bool ForceInitialStateReading = false;
 
+    [SerializeField]
+    public bool PaintAllTiles = false;
+
+    [SerializeField]
+    public int ExplorationsRounds = 1;
+
+    [SerializeField]
+    public bool LoadGroundTruth = false;
+
+    [SerializeField]
+    public bool RecordExplorations = false;
+    
     [SerializeField]
     public bool PrintViterbiPath = false;
 
@@ -81,8 +98,10 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     #region Unity_Methods
     // Use this for initialization
     void Start () {
+        UnityEngine.Debug.Log("Starting exploration");
         RandomizeStart = !RandomizeStart ? 
             GenerateGroundTruthData : RandomizeStart;
+        GenerateGroundTruthData = !LoadGroundTruth;
         /* providing hard coded readings for testing */
         g_TestReadings = new List<NavNode.NODE_TYPE>();
         g_TestReadings.Add(NavNode.NODE_TYPE.WALKABLE);
@@ -109,27 +128,34 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
         g_Stopwatch = System.Diagnostics.Stopwatch.StartNew();
         g_Stopwatch.Start();
         g_NodeTypes = new Dictionary<NavNode.NODE_TYPE, List<NavNodeData>>();
-        RaycastHit hit;
-        if(Physics.Raycast(new Ray(transform.position + (transform.up * 0.2f), -1 * transform.up), out hit)) {
-            g_Grid = hit.collider.GetComponent<NavGrid>();
-            g_NPCController.Debug(this + " - Grid Initialized ok");
+        if(g_Grid == null) {
+            RaycastHit hit;
+            if(Physics.Raycast(new Ray(transform.position + (transform.up * 0.2f), -1 * transform.up), out hit)) {
+                g_Grid = hit.collider.GetComponent<NavGrid>();
+                g_NPCController.Debug(this + " - Grid Initialized ok");
+            }
+            if (g_Grid == null) this.enabled = false;
         }
-        if (g_Grid == null) this.enabled = false;
+
         g_NodeValues = new Dictionary<NavNode, NavNodeData>();
-        if(RandomizeStart) {
-            NavNode n;
+
+        NavNode agentNode = null;
+        if (RandomizeStart) {
             do {
-                n = g_Grid.GetRandomNode();
-            } while (!n.IsWalkable());
-            transform.position = n.Position;
+                agentNode = g_Grid.GetRandomNode();
+            } while (!agentNode.IsWalkable());
+        } else {
+            agentNode = g_Grid.FindOccupiedNode(transform);
         }
+
+        g_LastAgentNode = agentNode;
+
         g_TotalNodesCount = g_Grid.NodesCount;
-        float freeTiles = g_TotalNodesCount - g_Grid.GetTotalBlockedTiles();
+        float freeTiles = g_TotalNodesCount - (g_TotalNodesCount * g_Grid.MinimunBlocked);
         foreach(NavNode.NODE_TYPE t in Enum.GetValues(typeof(NavNode.NODE_TYPE))) {
             g_NodeTypes.Add(t,new List<NavNodeData>());
         }
         // Initialize prior probabilities
-        NavNode agentNode = g_LastAgentNode = g_Grid.FindOccupiedNode(transform);
         foreach (NavNode n in g_Grid.NodesList()) {
             NavNodeData nd = new NavNodeData();
             nd.Node = n;
@@ -142,16 +168,16 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
             g_NodeValues.Add(n, nd);
             switch(n.NodeType) {
                 case NavNode.NODE_TYPE.HIGHWAY:
-                    n.SetHighlightTile(true, Color.blue, 0.8f);
+                    n.SetHighlightTile(PaintAllTiles, Color.blue, 0.8f);
                     break;
                 case NavNode.NODE_TYPE.WALKABLE:
-                    n.SetHighlightTile(true, Color.green, 0.8f);
+                    n.SetHighlightTile(PaintAllTiles, Color.green, 0.8f);
                     break;
                 case NavNode.NODE_TYPE.HARD_TO_WALK:
-                    n.SetHighlightTile(true, Color.yellow, 0.8f);
+                    n.SetHighlightTile(PaintAllTiles, Color.yellow, 0.8f);
                     break;
                 case NavNode.NODE_TYPE.NONWALKABLE:
-                    n.SetHighlightTile(true, Color.red, 0.8f);
+                    n.SetHighlightTile(PaintAllTiles, Color.red, 0.8f);
                     break;
             }
             nd.NodeType = n.NodeType;
@@ -159,11 +185,13 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
             g_NodeTypes[n.NodeType].Add(nd);
         }
 
-        if (GenerateGroundTruthData)
+        if (GenerateGroundTruthData) {
             GenerateGroundTruth();
+        } else if (LoadGroundTruth) {
+            LoadGroundTruthFile();
+        }
 
         g_ViterbiPath = new List<NavNodeData>();
-        g_NPCController.Debug(g_TestPolicies.ToString());
         g_NPCController.Debug("NPCExplorer initialized");
     }
 	
@@ -224,8 +252,8 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
                     if (g_LastAgentNode != null) {
                         if (AnimatedExploration && !g_NPCController.Body.Navigating) {
                             // go to
-                        } else {
                             g_NPCController.OrientTowards((g_LastAgentNode.Position - transform.position).normalized);
+                        } else {
                             transform.position = g_LastAgentNode.Position;
                         }
                     }
@@ -235,9 +263,18 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
 
                 } else {
                     g_NPCController.Debug("NPCExplorer -> Finished execution test!");
-                    Enabled = false;
+                    if (RecordExplorations)
+                        WriteResultsToFile();
+                    ExplorationsRounds--;
+                    Enabled = ExplorationsRounds > 0; 
                     g_ExploringRoundCount = 0;
                     g_ViterbiPath.Clear();
+                    g_GroundTruthData = null;
+                    g_LastAgentNode = null;
+                    g_TestPolicies.Clear();
+                    g_TestReadings.Clear();
+                    if (Enabled)
+                        Start();
                 }
             }
         }
@@ -465,6 +502,7 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     }
 
     private bool Tick() {
+        if(g_UpdateCycle < 0) return true;
         if(g_Stopwatch.ElapsedMilliseconds > g_UpdateCycle) {
             g_Stopwatch.Reset();
             g_Stopwatch.Start();
@@ -473,12 +511,37 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
         return false;
     }
 
+    private void WriteResultsToFile() {
+        string fileName = letterA + " - GroundTruth - " + FileName + ".txt";
+        letterA++;
+        if (File.Exists(fileName)) {
+            fileName = fileName.Substring(0, fileName.IndexOf(".txt")) + "_copy.txt";
+        }
+        StreamWriter sw = File.CreateText(fileName);
+        sw.WriteLine(g_GroundTruthData.InitialPosition.x+","+g_GroundTruthData.InitialPosition.y);
+        for (int i = 0; i < RandomStateValues; ++i) {
+            sw.WriteLine(
+                g_GroundTruthData.GetGroundTruth(i).Node.GridPosition.x + "," + g_GroundTruthData.GetGroundTruth(i).Node.GridPosition.y);
+        }
+        for (int i = 0; i < RandomStateValues; ++i) {
+            char v = g_GroundTruthData.GetGroundTruth(i).Policy == MOVE_POLICY.UP ? 'U' :
+                        (g_GroundTruthData.GetGroundTruth(i).Policy == MOVE_POLICY.DOWN ? 'D' :
+                            g_GroundTruthData.GetGroundTruth(i).Policy == MOVE_POLICY.RIGHT ? 'R' : 'L');
+            sw.WriteLine(v);
+        }
+        for (int i = 0; i < RandomStateValues; ++i) {
+            char v = g_GroundTruthData.GetGroundTruth(i).Read == NavNode.NODE_TYPE.WALKABLE ? 'N' :
+                        (g_GroundTruthData.GetGroundTruth(i).Read == NavNode.NODE_TYPE.HARD_TO_WALK ? 'T' : 'H'); 
+            sw.WriteLine(v);
+        }
+        sw.Close();
+    }
+
     private void GenerateGroundTruth() {
-        NavNode from = g_Grid.PickRandomNode();
         g_TestReadings.Clear();
         g_TestPolicies.Clear();
         g_GroundTruthData = new GroundTruthData(RandomStateValues);
-        g_GroundTruthData.InitialNode = from;
+        g_GroundTruthData.InitialPosition = new Vector2(g_LastAgentNode.GridPosition.x, g_LastAgentNode.GridPosition.y);
         System.Random random = new System.Random();
         int arrayLenght = Enum.GetValues(typeof(MOVE_POLICY)).Length;
         MOVE_POLICY[] policies = (MOVE_POLICY[])Enum.GetValues(typeof(MOVE_POLICY));
@@ -490,13 +553,50 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
         }
     }
 
+    private void LoadGroundTruthFile() {
+        string fileName = letterA + " - GroundTruth - " + FileName + ".txt";
+        if(File.Exists(fileName)) {
+            StreamReader sr = File.OpenText(fileName);
+            string line = null;
+            while ((line = sr.ReadLine()) != null) {
+                switch (line) {
+                    case "U":
+                        g_TestPolicies.Add(MOVE_POLICY.UP);
+                        break;
+                    case "D":
+                        g_TestPolicies.Add(MOVE_POLICY.DOWN);
+                        break;
+                    case "L":
+                        g_TestPolicies.Add(MOVE_POLICY.LEFT);
+                        break;
+                    case "R":
+                        g_TestPolicies.Add(MOVE_POLICY.RIGHT);
+                        break;
+                    case "N":
+                        g_TestReadings.Add(NavNode.NODE_TYPE.WALKABLE);
+                        break;
+                    case "H":
+                        g_TestReadings.Add(NavNode.NODE_TYPE.HIGHWAY);
+                        break;
+                    case "T":
+                        g_TestReadings.Add(NavNode.NODE_TYPE.HARD_TO_WALK);
+                        break;
+                    default:
+                        g_NPCController.Debug("Fucked up: " + line);
+                        break;
+                }
+            }
+            sr.Close();
+        }
+    }
+
     #endregion
 
 
     #region Support_Classes
     class GroundTruthData {
 
-        public NavNode InitialNode;
+        public Vector2 InitialPosition;
         NavNode[] ActualNode;
         MOVE_POLICY[] Policies;
         NavNode.NODE_TYPE[] Readings;

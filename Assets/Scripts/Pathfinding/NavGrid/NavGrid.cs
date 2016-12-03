@@ -44,6 +44,8 @@ namespace Pathfinding {
         public string       FileName = "Grid_Description.txt";
         public bool         LoadFromFile;
         public bool         RedrawGrid;
+        public int          HardAreasLength = 10;
+        public int          HighWayMinLength = 20;
         public bool         AddBlockerOnScene;
         public float        MinimunBlocked;
         public LayerMask    UnwalkableMask;
@@ -112,7 +114,7 @@ namespace Pathfinding {
                 ReadGridFromFile();
             } else {
                 int targetBlocked = (int)(MinimunBlocked * (tilesX * tilesY));
-                RandomizeHardWalkingAreas(RandomHeavyAreas, 31);
+                RandomizeHardWalkingAreas(RandomHeavyAreas, HardAreasLength);
                 RandomizeHighways(RandomHighways);
                 if (AddBlockerOnScene && (blocked < targetBlocked)) {
                     RandomizeBlockers(targetBlocked - blocked);
@@ -264,7 +266,7 @@ restart_highways:
                                     error = true;
                                 }
                             } else {
-                                if (count < 100) {
+                                if (count < HighWayMinLength) {
                                     error = true;
                                 } else {
                                     randomWalk = false;
@@ -370,7 +372,7 @@ restart_highways:
                                         cube.transform.localScale = new Vector3(n.Radius * 1.5f, n.Radius * 2, n.Radius * 1.5f);
                                         cube.transform.position = n.Position + (new Vector3(0f, n.Radius, 0f));
                                         cube.AddComponent<Rigidbody>();
-                                        cube.GetComponent<BoxCollider>().size = new Vector3(0.8f, 0.8f, 0.8f);
+                                        cube.GetComponent<BoxCollider>().size = new Vector3(0.75f, 0.75f, 0.75f);
                                         cube.transform.parent = obstacles;
                                         break;
 

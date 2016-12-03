@@ -54,19 +54,22 @@ namespace Pathfinding {
                 return g_TileText.GetComponent<TextMesh>().text;
             }
             set {
-                g_TileText.GetComponent<TextMesh>().text = value;
+                if(g_TileText != null)
+                    g_TileText.GetComponent<TextMesh>().text = value;
             }
         }
 
         public Color TileColor {
             set {
-                g_TileText.GetComponent<TextMesh>().color = value;
+                if (g_TileText != null)
+                    g_TileText.GetComponent<TextMesh>().color = value;
             }
         }
 
         public int TileTextSize {
             set {
-                g_TileText.GetComponent<TextMesh>().fontSize = value;
+                if (g_TileText != null)
+                    g_TileText.GetComponent<TextMesh>().fontSize = value;
             }
         }
 
