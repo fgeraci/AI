@@ -21,6 +21,8 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     #endregion
 
     #region Members
+    private List<string> g_Maps = new List<string>() { "A3_MapA", "A3_MapB", "A3_MapC", "A3_MapD", "A3_MapE", "A3_MapF", "A3_MapG", "A3_MapH", "A3_MapI", "A3_MapJ", "A3_MapK" };
+    private static int m_OriginalCount = 10;
     private static char letterA = 'A';
     private List<NavNode.NODE_TYPE> g_TestReadings;
     private List<MOVE_POLICY> g_TestPolicies;
@@ -42,6 +44,9 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     /// </summary>
     [SerializeField]
     public string FileName;
+
+    [SerializeField]
+    public string GTDFileName;
 
     [SerializeField]
     public bool ForceInitialStateReading = false;
@@ -98,6 +103,11 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     #region Unity_Methods
     // Use this for initialization
     void Start () {
+        if(g_Maps.Count > 0 && ExplorationsRounds == m_OriginalCount) {
+            // grab a new map
+            FileName = g_Maps[0];
+            g_Maps.RemoveAt(0);
+        }
         UnityEngine.Debug.Log("Starting exploration");
         RandomizeStart = !RandomizeStart ? 
             GenerateGroundTruthData : RandomizeStart;
@@ -236,8 +246,6 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
         if(Enabled) { 
             if(Tick()) {
                 
-                g_NPCController.Debug("Updating NPC Module: " + NPCModuleName());
-
                 if (g_TestPolicies.Count > 0) {
 
                     g_LastMovePolicy = g_TestPolicies[0];
@@ -266,7 +274,11 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
                     if (RecordExplorations)
                         WriteResultsToFile();
                     ExplorationsRounds--;
-                    Enabled = ExplorationsRounds > 0; 
+                    if(ExplorationsRounds == 0 && g_Maps.Count > 0) {
+                        ExplorationsRounds = m_OriginalCount;
+                        letterA = 'A';
+                    }
+                    Enabled = ExplorationsRounds > 0 && g_Maps.Count > 0;
                     g_ExploringRoundCount = 0;
                     g_ViterbiPath.Clear();
                     g_GroundTruthData = null;
@@ -275,6 +287,7 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
                     g_TestReadings.Clear();
                     if (Enabled)
                         Start();
+
                 }
             }
         }
@@ -517,6 +530,7 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
         if (File.Exists(fileName)) {
             fileName = fileName.Substring(0, fileName.IndexOf(".txt")) + "_copy.txt";
         }
+        UnityEngine.Debug.Log("Writing for: " + fileName);
         StreamWriter sw = File.CreateText(fileName);
         sw.WriteLine(g_GroundTruthData.InitialPosition.x+","+g_GroundTruthData.InitialPosition.y);
         for (int i = 0; i < RandomStateValues; ++i) {
@@ -554,10 +568,19 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     }
 
     private void LoadGroundTruthFile() {
-        string fileName = letterA + " - GroundTruth - " + FileName + ".txt";
-        if(File.Exists(fileName)) {
+        string fileName = "MapsAndSims/";
+
+        if (GTDFileName.Length == 0)
+            // Default name
+            fileName += letterA + " - GroundTruth - " + FileName + ".txt";
+        else
+            fileName += GTDFileName;
+
+        if (File.Exists(fileName)) {
             StreamReader sr = File.OpenText(fileName);
             string line = null;
+            string[] initialPosition = sr.ReadLine().Split(new char[] { ',' });
+            g_LastAgentNode = g_Grid.GetGridNode(int.Parse(initialPosition[0]), int.Parse(initialPosition[1]));
             while ((line = sr.ReadLine()) != null) {
                 switch (line) {
                     case "U":

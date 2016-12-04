@@ -351,7 +351,7 @@ restart_highways:
                                         // spawn cube
                                         n = g_Grid[r, c];
                                         cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                                        cube.transform.localScale = new Vector3(n.Radius * 1.5f, n.Radius * 2, n.Radius * 1.5f);
+                                        cube.transform.localScale = new Vector3(n.Radius * 1.25f, n.Radius * 2, n.Radius * 1.25f);
                                         cube.transform.position = n.Position + (new Vector3(0f, n.Radius, 0f));
                                         cube.AddComponent<Rigidbody>();
                                         cube.GetComponent<BoxCollider>().size = new Vector3(0.8f, 0.8f, 0.8f);
@@ -369,7 +369,7 @@ restart_highways:
                                         g_Grid[r, c].NodeStatus = NavNode.NODE_STATUS.HARD_TO_WALK;
                                         n = g_Grid[r, c];
                                         cube  = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                                        cube.transform.localScale = new Vector3(n.Radius * 1.5f, n.Radius * 2, n.Radius * 1.5f);
+                                        cube.transform.localScale = new Vector3(n.Radius * 1.25f, n.Radius * 2, n.Radius * 1.25f);
                                         cube.transform.position = n.Position + (new Vector3(0f, n.Radius, 0f));
                                         cube.AddComponent<Rigidbody>();
                                         cube.GetComponent<BoxCollider>().size = new Vector3(0.75f, 0.75f, 0.75f);
