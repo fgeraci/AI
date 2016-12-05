@@ -58,6 +58,9 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     public float PrunningThreshold = 0.00005f;
 
     [SerializeField]
+    public float PrunningMaximum = 0.09f;
+
+    [SerializeField]
     public string GTDFileName;
     
     [SerializeField]
@@ -114,7 +117,7 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     // Use this for initialization
 
     void Awake() {
-        PrunningThreshold /= 10000000f;
+        PrunningThreshold /= 1000000000f;
     }
 
     void Start () {
@@ -174,20 +177,19 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
         System.Random random = new System.Random();
         if (HeatMapTiles && g_Initialized) {
             // Optimization ?
-            g_HighestProbability = Mathf.Clamp(g_HighestProbability * PrunningThreshold, 0f, 0.8f);
+            g_HighestProbability = Mathf.Clamp(g_HighestProbability * PrunningThreshold, 0f, PrunningMaximum);
             // prune below threshold
             int count = 0;
             foreach (List<NavNodeData> l in g_NodeTypes.Values) {
                 // for each node
                 foreach (NavNodeData d in l) {
-                    if (d.Pruned) continue;
-                    if(d.Probability < g_HighestProbability) {
+                    if(d.Probability < g_HighestProbability || d.Pruned) {
                         d.Pruned = true;
                         count++;
                     }
                 }
             }
-            PrunningThreshold = count == 0 ? PrunningThreshold * 10 : PrunningThreshold;
+            PrunningThreshold = (count == 0) ? PrunningThreshold * 5 : PrunningThreshold;
             UnityEngine.Debug.Log(count + " tiles prunned with Threshold: " + PrunningThreshold +" - " + (g_TotalNodesCount - count) + " remain");
             goto StartExploration;
         }
@@ -240,11 +242,14 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
         g_ViterbiPath = new List<NavNodeData>();
         g_NPCController.Debug("NPCExplorer initialized");
         g_Initialized = true;
+
     StartExploration:
+
         if (LoadGroundTruth) {
             LoadGroundTruthFile();
         }
         g_Stopwatch.Start();
+
     }
 	
 	/// <summary>
@@ -341,13 +346,13 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
                             foreach (NavNodeData d in l) {
                                 switch (d.Node.NodeType) {
                                     case NavNode.NODE_TYPE.WALKABLE:
-                                        d.Node.SetHighlightTile(true, Color.green, (d.Probability * 100000000)/g_HighestProbability);
+                                        d.Node.SetHighlightTile(true, Color.green, (d.Probability * 10000000)/g_HighestProbability);
                                         break;
                                     case NavNode.NODE_TYPE.HARD_TO_WALK:
-                                        d.Node.SetHighlightTile(true, Color.yellow, (d.Probability * 100000000) / g_HighestProbability);
+                                        d.Node.SetHighlightTile(true, Color.yellow, (d.Probability * 10000000) / g_HighestProbability);
                                         break;
                                     case NavNode.NODE_TYPE.HIGHWAY:
-                                        d.Node.SetHighlightTile(true, Color.blue, (d.Probability * 100000000) / g_HighestProbability);
+                                        d.Node.SetHighlightTile(true, Color.blue, (d.Probability * 10000000) / g_HighestProbability);
                                         break;
                                 }
                             }
@@ -356,12 +361,13 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
                         foreach(NavNode visNodes in g_VisitedNodes.Keys) {
                             visNodes.SetHighlightTile(true, Color.red, 1f);
                         }
-
-
-                        g_AvgError.Add(g_DifferenceSum / 100);
-                        UnityEngine.Debug.Log("Round: " + g_CurrentRound + " - Avg Euclidean Error: " + g_AvgError);
-                        g_CurrentRound++;
                     }
+
+                    float avgErrorVal = g_DifferenceSum / 100;
+                    g_AvgError.Add(avgErrorVal);
+                    UnityEngine.Debug.Log("Round: " + g_CurrentRound + " - Avg Euclidean Error: " + avgErrorVal);
+                    g_DifferenceSum = 0;
+                    g_CurrentRound++;
 
                 }
             }
@@ -527,14 +533,15 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
                 d.Node.TileText = PrintViterbiPath ?
                     ((float)Math.Round((d.ViterbiProbability) * decimals) / decimals).ToString() :
                     ((float)Math.Round((d.Probability) * decimals) / decimals).ToString();
-                g_DifferenceSum += Vector3.Distance(g_LastAgentNode.Position, maxNode.Node.Position);
             }
         }
+
         g_ViterbiPath.Add(maxNode);
         if (PrintViterbiPath) {
             maxNode.Node.TileColor = Color.red;
             maxNode.Node.TileText = "Node " + g_ExploringRoundCount + "\n" + maxNode.Node.TileText;
         }
+        g_DifferenceSum += Vector3.Distance(g_LastAgentNode.Position, maxNode.Node.Position);
     }
 
     /// <summary>
