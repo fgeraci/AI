@@ -91,6 +91,9 @@ namespace Pathfinding {
         public float Radius {
             get { return g_Radius; }
         }
+
+        public float Alpha;
+
         public Vector3 Position {
             get { return g_Position; }
         }
@@ -166,6 +169,7 @@ namespace Pathfinding {
         }
 
         public void SetHighlightTile(bool h, Color c, float alpha) {
+            Alpha = alpha;
             if(h) {
                 if (g_Tile != null) goto destroy_tile;
                 g_Tile = GameObject.CreatePrimitive(PrimitiveType.Cube);

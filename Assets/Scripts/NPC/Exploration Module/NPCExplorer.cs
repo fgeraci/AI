@@ -21,7 +21,8 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     #endregion
 
     #region Members
-    private List<string> g_Maps = new List<string>() { "A3_MapA", "A3_MapB", "A3_MapC", "A3_MapD", "A3_MapE", "A3_MapF", "A3_MapG", "A3_MapH", "A3_MapI", "A3_MapJ", "A3_MapK" };
+    private List<string> g_Maps;
+        //= new List<string>() { "A3_MapA", "A3_MapB", "A3_MapC", "A3_MapD", "A3_MapE", "A3_MapF", "A3_MapG", "A3_MapH", "A3_MapI", "A3_MapJ", "A3_MapK" };
     private static int m_OriginalCount = 10;
     private static char letterA = 'A';
     private List<NavNode.NODE_TYPE> g_TestReadings;
@@ -38,7 +39,12 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     private MOVE_POLICY g_LastMovePolicy = MOVE_POLICY.STAY;
     private NavNode g_LastAgentNode;
     private List<NavNodeData> g_ViterbiPath;
-
+    private bool g_Initialized = false;
+    private Dictionary<NavNode,NavNodeData> g_VisitedNodes;
+    private float g_HighestProbability, g_MinProbability;
+    private float g_DifferenceSum = 0;
+    private List<float> g_AvgError;
+    private int g_CurrentRound = 1;
     /// <summary>
     /// g_TestReadings must be populated
     /// </summary>
@@ -46,11 +52,14 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     public string FileName;
 
     [SerializeField]
-    public string GTDFileName;
+    public bool HeatMapTiles;
 
     [SerializeField]
-    public bool ForceInitialStateReading = false;
+    public float PrunningThreshold = 0.00005f;
 
+    [SerializeField]
+    public string GTDFileName;
+    
     [SerializeField]
     public bool PaintAllTiles = false;
 
@@ -101,9 +110,20 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     #endregion
 
     #region Unity_Methods
+
     // Use this for initialization
+
+    void Awake() {
+        PrunningThreshold /= 10000000f;
+    }
+
     void Start () {
-        if(g_Maps.Count > 0 && ExplorationsRounds == m_OriginalCount) {
+        if (g_AvgError == null)
+            g_AvgError = new List<float>();
+        if (g_VisitedNodes == null)
+            g_VisitedNodes = new Dictionary<NavNode, NavNodeData>();
+        g_Maps = new List<string>();
+        if (g_Maps.Count > 0 && ExplorationsRounds == m_OriginalCount) {
             // grab a new map
             FileName = g_Maps[0];
             g_Maps.RemoveAt(0);
@@ -112,6 +132,7 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
         RandomizeStart = !RandomizeStart ? 
             GenerateGroundTruthData : RandomizeStart;
         GenerateGroundTruthData = !LoadGroundTruth;
+
         /* providing hard coded readings for testing */
         g_TestReadings = new List<NavNode.NODE_TYPE>();
         g_TestReadings.Add(NavNode.NODE_TYPE.WALKABLE);
@@ -126,18 +147,10 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
         g_TestPolicies.Add(MOVE_POLICY.DOWN);
         /* ---------------------------------------- */
 
-        // we move first
-        if (ForceInitialStateReading) {
-            g_LastMovePolicy = g_TestPolicies[0];
-            g_TestPolicies.Remove(0);
-            AnimatedExploration = false;
-        }
-
-        g_NPCController = GetComponent<NPCController>();
+        g_NPCController = g_NPCController == null ?  GetComponent<NPCController>() : g_NPCController;
         g_UpdateCycle = (long) (UpdateInSeconds * 1000);
-        g_Stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        g_Stopwatch.Start();
-        g_NodeTypes = new Dictionary<NavNode.NODE_TYPE, List<NavNodeData>>();
+        g_Stopwatch = Stopwatch.StartNew();
+        
         if(g_Grid == null) {
             RaycastHit hit;
             if(Physics.Raycast(new Ray(transform.position + (transform.up * 0.2f), -1 * transform.up), out hit)) {
@@ -147,7 +160,6 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
             if (g_Grid == null) this.enabled = false;
         }
 
-        g_NodeValues = new Dictionary<NavNode, NavNodeData>();
 
         NavNode agentNode = null;
         if (RandomizeStart) {
@@ -159,37 +171,63 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
         }
 
         g_LastAgentNode = agentNode;
+        System.Random random = new System.Random();
+        if (HeatMapTiles && g_Initialized) {
+            // Optimization ?
+            g_HighestProbability = Mathf.Clamp(g_HighestProbability * PrunningThreshold, 0f, 0.8f);
+            // prune below threshold
+            int count = 0;
+            foreach (List<NavNodeData> l in g_NodeTypes.Values) {
+                // for each node
+                foreach (NavNodeData d in l) {
+                    if (d.Pruned) continue;
+                    if(d.Probability < g_HighestProbability) {
+                        d.Pruned = true;
+                        count++;
+                    }
+                }
+            }
+            PrunningThreshold = count == 0 ? PrunningThreshold * 10 : PrunningThreshold;
+            UnityEngine.Debug.Log(count + " tiles prunned with Threshold: " + PrunningThreshold +" - " + (g_TotalNodesCount - count) + " remain");
+            goto StartExploration;
+        }
 
         g_TotalNodesCount = g_Grid.NodesCount;
         float freeTiles = g_TotalNodesCount - (g_TotalNodesCount * g_Grid.MinimunBlocked);
+        g_NodeTypes = new Dictionary<NavNode.NODE_TYPE, List<NavNodeData>>();
         foreach(NavNode.NODE_TYPE t in Enum.GetValues(typeof(NavNode.NODE_TYPE))) {
             g_NodeTypes.Add(t,new List<NavNodeData>());
         }
         // Initialize prior probabilities
+        g_NodeValues = new Dictionary<NavNode, NavNodeData>();
         foreach (NavNode n in g_Grid.NodesList()) {
             NavNodeData nd = new NavNodeData();
             nd.Node = n;
+
             if(n.IsWalkable() || agentNode == n) {
                 nd.Probability = nd.ViterbiProbability = 1f / freeTiles;
                 nd.MovePolicy = MOVE_POLICY.UP;
             } else {
                 nd.Probability = nd.ViterbiProbability = 0f;
             }
+
             g_NodeValues.Add(n, nd);
+            
             switch(n.NodeType) {
                 case NavNode.NODE_TYPE.HIGHWAY:
-                    n.SetHighlightTile(PaintAllTiles, Color.blue, 0.8f);
+                    n.SetHighlightTile(PaintAllTiles, Color.blue, PaintAllTiles ? 0.8f : 0f);
                     break;
                 case NavNode.NODE_TYPE.WALKABLE:
-                    n.SetHighlightTile(PaintAllTiles, Color.green, 0.8f);
+                    n.SetHighlightTile(PaintAllTiles, Color.green, PaintAllTiles ? 0.8f : 0f);
                     break;
                 case NavNode.NODE_TYPE.HARD_TO_WALK:
-                    n.SetHighlightTile(PaintAllTiles, Color.yellow, 0.8f);
+                    n.SetHighlightTile(PaintAllTiles, Color.yellow, PaintAllTiles ? 0.8f : 0f);
                     break;
                 case NavNode.NODE_TYPE.NONWALKABLE:
-                    n.SetHighlightTile(PaintAllTiles, Color.red, 0.8f);
+                    n.SetHighlightTile(PaintAllTiles, Color.red, PaintAllTiles ? 0.8f : 0f);
                     break;
             }
+            
             nd.NodeType = n.NodeType;
             g_NPCController.Debug("Discovered new Node " + nd);
             g_NodeTypes[n.NodeType].Add(nd);
@@ -197,12 +235,16 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
 
         if (GenerateGroundTruthData) {
             GenerateGroundTruth();
-        } else if (LoadGroundTruth) {
-            LoadGroundTruthFile();
         }
-
+         
         g_ViterbiPath = new List<NavNodeData>();
         g_NPCController.Debug("NPCExplorer initialized");
+        g_Initialized = true;
+    StartExploration:
+        if (LoadGroundTruth) {
+            LoadGroundTruthFile();
+        }
+        g_Stopwatch.Start();
     }
 	
 	/// <summary>
@@ -256,14 +298,20 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
                     g_LastReadType = Sense(g_LastAgentNode, g_NodeValues[g_LastAgentNode]);
 
                     UpdateNodes(g_LastAgentNode);
-
+                    
                     if (g_LastAgentNode != null) {
+                        
                         if (AnimatedExploration && !g_NPCController.Body.Navigating) {
                             // go to
                             g_NPCController.OrientTowards((g_LastAgentNode.Position - transform.position).normalized);
                         } else {
                             transform.position = g_LastAgentNode.Position;
+                            g_LastAgentNode.SetHighlightTile(true, Color.red, 1f);
+                            
                         }
+                        if (!g_VisitedNodes.ContainsKey(g_LastAgentNode))
+                            g_VisitedNodes.Add(g_LastAgentNode, null);
+
                     }
                     if(GenerateGroundTruthData)
                         g_NPCController.Debug(g_GroundTruthData.GetGroundTruth(g_ExploringRoundCount).ToString());
@@ -278,7 +326,7 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
                         ExplorationsRounds = m_OriginalCount;
                         letterA = 'A';
                     }
-                    Enabled = ExplorationsRounds > 0 && g_Maps.Count > 0;
+                    Enabled = ExplorationsRounds > 0 && (g_Maps.Count > 0 || HeatMapTiles);
                     g_ExploringRoundCount = 0;
                     g_ViterbiPath.Clear();
                     g_GroundTruthData = null;
@@ -287,6 +335,33 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
                     g_TestReadings.Clear();
                     if (Enabled)
                         Start();
+                    if (HeatMapTiles && !Enabled) {
+                        foreach (List<NavNodeData> l in g_NodeTypes.Values) {
+                            // for each node
+                            foreach (NavNodeData d in l) {
+                                switch (d.Node.NodeType) {
+                                    case NavNode.NODE_TYPE.WALKABLE:
+                                        d.Node.SetHighlightTile(true, Color.green, (d.Probability * 100000000)/g_HighestProbability);
+                                        break;
+                                    case NavNode.NODE_TYPE.HARD_TO_WALK:
+                                        d.Node.SetHighlightTile(true, Color.yellow, (d.Probability * 100000000) / g_HighestProbability);
+                                        break;
+                                    case NavNode.NODE_TYPE.HIGHWAY:
+                                        d.Node.SetHighlightTile(true, Color.blue, (d.Probability * 100000000) / g_HighestProbability);
+                                        break;
+                                }
+                            }
+                        }
+
+                        foreach(NavNode visNodes in g_VisitedNodes.Keys) {
+                            visNodes.SetHighlightTile(true, Color.red, 1f);
+                        }
+
+
+                        g_AvgError.Add(g_DifferenceSum / 100);
+                        UnityEngine.Debug.Log("Round: " + g_CurrentRound + " - Avg Euclidean Error: " + g_AvgError);
+                        g_CurrentRound++;
+                    }
 
                 }
             }
@@ -309,7 +384,7 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
         foreach (List<NavNodeData> l in g_NodeTypes.Values) {
             // for each node
             foreach(NavNodeData d in l) {
-
+                
                 updatedNodes.Add(d.Node, new NavNodeData());
 
                 float sense,                                //  P(E|E-1)
@@ -320,7 +395,7 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
                     (1f - SuccessRate) * PreviousBelief;
 
                 // 0.9 Success, 0.05 on sensing some wrong other type
-                if(d.NodeType == NavNode.NODE_TYPE.NONWALKABLE) {
+                if((d.NodeType == NavNode.NODE_TYPE.NONWALKABLE) || d.Pruned) {
 
                     d.Probability = 0;
 
@@ -427,6 +502,8 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
                     // do not update the nodes until the round is over
                     updatedNodes[d.Node].ViterbiProbability = sense * maxSum;
                     updatedNodes[d.Node].Probability = sense * sum;
+                    g_HighestProbability = Math.Max(g_HighestProbability, updatedNodes[d.Node].Probability);
+                    g_MinProbability = Math.Min(g_HighestProbability, updatedNodes[d.Node].Probability);
                     // compute alphas
                     viterbiAlpha += updatedNodes[d.Node].ViterbiProbability;
                     alpha += updatedNodes[d.Node].Probability;
@@ -450,6 +527,7 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
                 d.Node.TileText = PrintViterbiPath ?
                     ((float)Math.Round((d.ViterbiProbability) * decimals) / decimals).ToString() :
                     ((float)Math.Round((d.Probability) * decimals) / decimals).ToString();
+                g_DifferenceSum += Vector3.Distance(g_LastAgentNode.Position, maxNode.Node.Position);
             }
         }
         g_ViterbiPath.Add(maxNode);
@@ -568,7 +646,7 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     }
 
     private void LoadGroundTruthFile() {
-        string fileName = "MapsAndSims/";
+        string fileName = "MapsAndSims" + Path.DirectorySeparatorChar;
 
         if (GTDFileName.Length == 0)
             // Default name
@@ -577,6 +655,10 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
             fileName += GTDFileName;
 
         if (File.Exists(fileName)) {
+
+            g_TestPolicies.Clear();
+            g_TestReadings.Clear();
+
             StreamReader sr = File.OpenText(fileName);
             string line = null;
             string[] initialPosition = sr.ReadLine().Split(new char[] { ',' });
@@ -661,6 +743,7 @@ public class NPCExplorer : MonoBehaviour, INPCModule {
     }
 
     class NavNodeData {
+        public bool Pruned = false;
         public NavNode Node;
         public float Probability;
         public float ViterbiProbability;
